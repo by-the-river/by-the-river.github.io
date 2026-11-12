@@ -167,6 +167,27 @@ a:focus-visible, button:focus-visible, textarea:focus-visible {
 }
 .section-lead { margin-top: 12px; color: var(--muted); font-size: 17px; }
 
+/* 학생 전용 링크 */
+.student-links { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 36px; }
+.student-link {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+  padding: 26px 24px; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--card); text-decoration: none;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.student-link:hover { border-color: var(--navy); box-shadow: 0 14px 30px -20px rgba(26, 35, 82, .5); transform: translateY(-2px); }
+.sl-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; background: var(--navy); color: #fff; }
+.student-link.ask .sl-icon { background: var(--orange); }
+.sl-icon svg { width: 26px; height: 26px; }
+.sl-body { display: block; }
+.sl-tag { display: block; color: var(--accent); font-size: 13px; font-weight: 700; }
+.student-link.ask .sl-tag { color: var(--orange); }
+.sl-title { display: block; margin-top: 2px; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+.sl-desc { display: block; margin-top: 4px; color: var(--muted); font-size: 15px; line-height: 1.55; }
+.sl-go { font-size: 22px; font-weight: 700; color: var(--muted); }
+.student-link:hover .sl-go { color: var(--navy); }
+@media (prefers-reduced-motion: reduce) { .student-link { transition: none; } .student-link:hover { transform: none; } }
+
 /* 수업 소개 */
 .classes {
   display: grid;
@@ -347,6 +368,7 @@ dialog .button { width: 100%; }
 /* 태블릿 */
 @media (max-width: 1000px) {
   .column-list { grid-template-columns: repeat(2, 1fr); }
+  .student-links { grid-template-columns: 1fr; }
   .stage { grid-template-columns: 1fr; gap: 20px; }
   .principles { gap: 24px; }
   .hero h1 { font-size: 40px; }
@@ -362,6 +384,11 @@ dialog .button { width: 100%; }
   .nav-link.optional { display: none; }
   .logo { font-size: 17px; }
   html { scroll-padding-top: 68px; }
+  .student-links { grid-template-columns: 1fr; gap: 12px; margin-top: 28px; }
+  .student-link { gap: 14px; padding: 20px 18px; }
+  .sl-icon { width: 46px; height: 46px; }
+  .sl-title { font-size: 19px; }
+  .sl-desc { font-size: 14px; }
 
   .hero .wrap {
     grid-template-columns: 1fr;

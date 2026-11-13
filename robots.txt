@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://by-the-river.github.io/sitemap.xml
+Sitemap: https://akymath.kr/sitemap.xml

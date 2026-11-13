@@ -236,6 +236,74 @@
     el.querySelectorAll('h2, h3').forEach((h) => { if (h.textContent.trim() === '답') h.classList.add('final'); });
   }
 
+  /* ---------- 단계별 풀이: 학생이 한 단계씩 눌러서 열기 ---------- */
+  // ## 제목별로 나누고, '풀이'는 ### 단계별로 (없으면 번호 목록으로) 나눔
+  function splitSteps(body) {
+    const out = []; let cur = null;
+    body.split('\n').forEach((line) => {
+      const h3 = line.match(/^###\s+(.*)$/);
+      if (h3) { cur = { title: h3[1].replace(/^\d+\s*단계\s*[:：.)]?\s*/, '').trim(), lines: [] }; out.push(cur); }
+      else { if (!cur) { cur = { title: '', lines: [] }; out.push(cur); } cur.lines.push(line); }
+    });
+    let steps = out.map((s) => ({ title: s.title, body: s.lines.join('\n').trim() })).filter((s) => s.title || s.body);
+    if (steps.length <= 1) {
+      const parts = body.split(/\n(?=\d+[.)]\s)/).map((p) => p.trim()).filter(Boolean);
+      if (parts.length > 1) steps = parts.map((p) => ({ title: '', body: p.replace(/^\d+[.)]\s+/, '') }));
+    }
+    return steps.length ? steps : [{ title: '', body }];
+  }
+  function buildSteps(md) {
+    const sections = []; let cur = null;
+    stripVerdict(md).split('\n').forEach((line) => {
+      const h2 = line.match(/^##\s+([^#].*)$/);
+      if (h2) { cur = { title: h2[1].trim(), lines: [] }; sections.push(cur); }
+      else { if (!cur) { cur = { title: '', lines: [] }; sections.push(cur); } cur.lines.push(line); }
+    });
+    const cards = [];
+    for (const s of sections) {
+      const body = s.lines.join('\n').trim();
+      if (!body) continue;
+      if (/^풀이/.test(s.title)) splitSteps(body).forEach((st, i) => cards.push({ kind: 'step', label: `${i + 1}단계`, title: st.title, body: st.body }));
+      else if (/^답/.test(s.title)) cards.push({ kind: 'answer', label: '답', title: '', body });
+      else if (/핵심/.test(s.title)) cards.push({ kind: 'hint', label: '핵심 원리', title: '', body });
+      else cards.push({ kind: /문제 읽기/.test(s.title) ? 'read' : 'extra', label: s.title || '풀이', title: '', body });
+    }
+    return cards;
+  }
+  const openKey = (id) => 'ask-open-' + id;
+  function paintSteps(text, id, scrollTo) {
+    const el = $('answer');
+    const cards = buildSteps(text);
+    const opened = Math.max(1, Math.min(store.get(openKey(id), 1), cards.length));
+    el.classList.add('stepped');
+    el.innerHTML = `
+      <div class="step-progress" aria-label="${opened}/${cards.length} 단계 열람"><i style="width:${Math.round(opened / cards.length * 100)}%"></i><span>${opened} / ${cards.length}</span></div>
+      <p class="step-guide">한 단계씩 열어 보고, 다음 단계는 먼저 스스로 해 보세요.</p>
+      <div class="steps">${cards.map((c, i) => {
+        if (i < opened) return `
+          <section class="step-card open k-${c.kind}" id="step-${i}">
+            <div class="step-head"><span class="step-tag">${esc(c.label)}</span>${c.title ? `<b>${esc(c.title)}</b>` : ''}</div>
+            <div class="step-body">${renderMd(c.body)}</div>
+          </section>`;
+        if (i === opened) return `
+          <button type="button" class="step-card next k-${c.kind}" data-step-next>
+            <span class="step-tag">${esc(c.label)}</span>
+            <span class="step-next-text">${c.kind === 'answer' ? '끝까지 고민해 봤나요? 눌러서 답 확인하기'
+              : c.kind === 'step' && c.title ? `${esc(c.title)}<em>눌러서 보기</em>` : '<em>눌러서 보기</em>'}</span>
+          </button>`;
+        return `<div class="step-card locked"><span class="step-tag">${esc(c.label)}</span></div>`;
+      }).join('')}</div>
+      <div class="step-actions">
+        ${opened > 1 ? '<button type="button" class="text-btn" data-step-set="1">처음부터 다시 가리기</button>' : '<span></span>'}
+        ${opened < cards.length ? `<button type="button" class="text-btn" data-step-set="${cards.length}">남은 풀이 모두 보기</button>` : ''}
+      </div>`;
+    const go = (n, target) => { store.set(openKey(id), n); paintSteps(text, id, target); renderHistory(); };
+    const next = el.querySelector('[data-step-next]');
+    if (next) next.onclick = () => go(opened + 1, opened);
+    el.querySelectorAll('[data-step-set]').forEach((b) => b.onclick = () => go(+b.dataset.stepSet));
+    if (scrollTo !== undefined) $('step-' + scrollTo)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   function showStamp(verdict) {
     const st = $('stamp');
     const map = { correct: ['정답', 'CORRECT'], wrong: ['오답', 'CHECK'], unclear: ['확인<br>필요', 'RETAKE'] };
@@ -309,7 +377,7 @@
 
     try {
       const res = await callFn({
-        action: 'ask', mode, note,
+        action: 'ask', mode, note, style: mode === 'solve' ? 'steps' : undefined,
         problem: { type: state.problem.type, data: state.problem.data },
         work: mode === 'check' ? state.work.map((w) => ({ type: w.type, data: w.data })) : [],
       });
@@ -334,9 +402,15 @@
           if (!line) continue;
           const ev = JSON.parse(line.slice(6));
           if (ev.type === 'delta') {
+            if (mode === 'solve') {
+              // 단계별 풀이는 다 받은 뒤 카드로 보여 줌 (그 전까지는 기다림 화면 유지)
+              if (!text) { setStep(2); const w = answerEl.querySelector('.waiting'); if (w) w.firstChild.textContent = '거의 다 됐어요. 풀이를 단계별로 정리하고 있어요 · '; }
+              text += ev.text;
+              continue;
+            }
             if (!text) { setStep(3); prog.hidden = true; }
             text += ev.text;
-            if (mode === 'check' && parseVerdict(text)) showStamp(parseVerdict(text));
+            if (parseVerdict(text)) showStamp(parseVerdict(text));
             schedulePaint();
           } else if (ev.type === 'done') finished = ev;
           else if (ev.type === 'error') {
@@ -357,12 +431,14 @@
     if (failed && !text) {
       answerEl.innerHTML = `<p class="err">${esc(failed)}</p>`;
     } else {
-      paintAnswer(text, false);
+      const id = finished?.id || at;
+      if (mode === 'solve') paintSteps(text, id);
+      else paintAnswer(text, false);
       if (failed) answerEl.insertAdjacentHTML('beforeend', `<p class="err">${esc(failed)}</p>`);
       else if (finished && finished.truncated) answerEl.insertAdjacentHTML('beforeend', '<p class="err">풀이가 길어서 중간에 끊겼어요.</p>');
       const verdict = mode === 'check' ? (finished?.verdict || parseVerdict(text) || 'unclear') : null;
       if (mode === 'check') showStamp(verdict);
-      if (!failed) saveHistory({ id: finished?.id || at, mode, at, note, verdict, answer: text, images });
+      if (!failed) saveHistory({ id, mode, at, note, verdict, answer: text, images });
     }
     $('resultFoot').hidden = false;
     state.busy = false;
@@ -394,7 +470,11 @@
     $('historyList').innerHTML = list.map((h, i) => {
       const tag = h.mode === 'check'
         ? `<span class="h-tag ${h.verdict || ''}">${h.verdict === 'correct' ? '정답' : h.verdict === 'wrong' ? '오답 첨삭' : '첨삭'}</span>`
-        : '<span class="h-tag">풀이</span>';
+        : (() => {
+          const total = buildSteps(h.answer || '').length;
+          const seen = Math.max(1, Math.min(store.get(openKey(h.id || h.at), 1), total));
+          return `<span class="h-tag">풀이 ${seen}/${total}</span>`;
+        })();
       const firstLine = stripVerdict(h.answer || '').split('\n').map(plainTex).filter((l) => l && !/^(문제 읽기|한 줄 진단)$/.test(l))[0] || '';
       return `<li><button type="button" data-history="${i}">
         <div class="h-img">${h.images && h.images[0] ? `<img src="${h.images[0]}" alt="">` : ''}${tag}</div>
@@ -407,8 +487,8 @@
     if (!h) return;
     openResult({ mode: h.mode, at: h.at, images: h.images || [] });
     $('progress').hidden = true;
-    paintAnswer(h.answer, false);
-    if (h.mode === 'check') showStamp(h.verdict);
+    if (h.mode === 'check') { paintAnswer(h.answer, false); showStamp(h.verdict); }
+    else paintSteps(h.answer, h.id || h.at);
     $('resultFoot').hidden = false;
     $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }

@@ -273,6 +273,57 @@ textarea:focus { outline: none; border-color: var(--navy); background: var(--car
 @keyframes blink { 50% { opacity: 0; } }
 .answer .err { padding: 14px 16px; border-radius: 12px; background: var(--pen-soft); color: var(--pen); font-weight: 700; }
 
+/* ---------- 단계별 풀이 카드 ---------- */
+.answer.stepped { counter-reset: none; }
+.step-progress {
+  position: relative; height: 8px; margin-top: 16px; border-radius: 99px; background: var(--line); overflow: visible;
+}
+.step-progress i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 99px; background: var(--navy); transition: width .3s ease; }
+.step-progress span { position: absolute; right: 0; top: 12px; font-size: 12px; font-weight: 800; color: var(--navy); font-variant-numeric: tabular-nums; }
+.step-guide { margin-top: 8px !important; padding-right: 48px; color: var(--muted); font-size: 13px; }
+.steps { display: flex; flex-direction: column; gap: 10px; margin-top: 16px !important; }
+.step-card {
+  display: block; width: 100%; text-align: left; font: inherit; color: inherit;
+  padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--card);
+  scroll-margin-top: 90px;
+}
+.step-card.open { animation: stepin .3s ease-out; }
+@keyframes stepin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.step-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+.step-head b { font-size: 15px; font-weight: 800; }
+.step-tag {
+  display: inline-flex; align-items: center; padding: 1px 10px; border-radius: 99px;
+  background: var(--navy-soft); color: var(--navy); font-size: 12px; font-weight: 800; white-space: nowrap;
+}
+.step-card.k-hint .step-tag { background: #fff4dc; color: #8a5a00; }
+.step-card.open.k-answer { border-color: var(--navy); background: #fafbfe; }
+.step-card.open.k-answer .step-tag { background: var(--navy); color: #fff; }
+.step-card.open.k-answer .step-body { font-size: 17px; font-weight: 800; }
+.step-body > * + * { margin-top: 8px; }
+.step-body ol, .step-body ul { padding-left: 1.3em; }
+.step-body .katex-display { margin: 8px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.step-body p { line-height: 1.85; }
+/* 다음에 열 카드 */
+.step-card.next {
+  display: flex; flex-direction: column; gap: 6px; cursor: pointer;
+  border: 1.5px dashed var(--navy); background: repeating-linear-gradient(-45deg, #fafbfe 0 10px, #f3f5fb 10px 20px);
+  transition: transform .1s, box-shadow .15s;
+}
+.step-card.next:hover { box-shadow: 0 8px 20px -14px rgba(26, 35, 82, .6); }
+.step-card.next:active { transform: translateY(1px); }
+.step-card.next .step-tag { align-self: flex-start; background: var(--card); }
+.step-next-text { font-size: 15px; font-weight: 700; color: var(--navy); }
+.step-next-text em { display: inline-block; margin-left: 8px; font-style: normal; font-size: 13px; color: var(--accent); }
+.step-next-text em::after { content: " →"; }
+.step-card.next.k-answer { border-color: var(--pen); background: var(--pen-soft); }
+.step-card.next.k-answer .step-next-text { color: var(--pen); }
+.step-card.next.k-answer .step-tag { color: var(--pen); }
+/* 아직 잠긴 카드 */
+.step-card.locked { padding: 9px 16px; border-style: dashed; background: transparent; }
+.step-card.locked .step-tag { background: transparent; color: #a3a8b8; padding-left: 0; }
+.step-card.locked .step-tag::before { content: ""; width: 10px; height: 11px; margin-right: 6px; border-radius: 2px; background: #c3c7d2; box-shadow: inset 0 -5px 0 #c3c7d2; }
+.step-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px !important; }
+
 .result-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 26px; padding-top: 16px; border-top: 1px dashed var(--line); }
 .result-foot p { flex: 1 1 240px; color: var(--muted); font-size: 13px; }
 .ghost { min-height: 44px; padding: 0 18px; border: 1.5px solid var(--navy); border-radius: 12px; background: var(--card); color: var(--navy); font-weight: 800; }

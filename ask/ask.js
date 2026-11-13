@@ -218,6 +218,13 @@
     });
   }
   const stripVerdict = (s) => s.replace(/^\s*판정:[^\n]*\n?/, '');
+  // 기록 목록용 한 줄 미리보기: 수식 코드를 읽기 쉬운 글자로
+  const TEX = { le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', theta: 'θ', infty: '∞', cdot: '·', times: '×', pm: '±', to: '→', sqrt: '√', lim: ' lim', sin: ' sin', cos: ' cos', tan: ' tan', ln: ' ln', log: ' log' };
+  const plainTex = (s) => String(s || '')
+    .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
+    .replace(/\\([a-zA-Z]+)/g, (_, w) => TEX[w] ?? '')
+    .replace(/\^\{?2\}?/g, '²').replace(/\^\{?3\}?/g, '³')
+    .replace(/[{}$#>*`\\]/g, '').replace(/\s+/g, ' ').trim();
   function parseVerdict(s) {
     const m = s.match(/^\s*판정:\s*(정답|오답|확인 어려움)/);
     return m ? { '정답': 'correct', '오답': 'wrong', '확인 어려움': 'unclear' }[m[1]] : null;
@@ -236,7 +243,7 @@
     st.className = 'stamp ' + verdict;
     st.innerHTML = `<div>${map[verdict][0]}<small>${map[verdict][1]}</small></div>`;
     st.hidden = false;
-    $('answer').classList.toggle('correct', verdict === 'correct');
+    ['correct', 'wrong', 'unclear'].forEach((v) => $('answer').classList.toggle(v, v === verdict));
   }
 
   function fmtTime(iso) {
@@ -388,7 +395,7 @@
       const tag = h.mode === 'check'
         ? `<span class="h-tag ${h.verdict || ''}">${h.verdict === 'correct' ? '정답' : h.verdict === 'wrong' ? '오답 첨삭' : '첨삭'}</span>`
         : '<span class="h-tag">풀이</span>';
-      const firstLine = stripVerdict(h.answer || '').replace(/[#>*$\\]/g, '').split('\n').map((l) => l.trim()).filter((l) => l && !/^(문제 읽기|한 줄 진단)$/.test(l))[0] || '';
+      const firstLine = stripVerdict(h.answer || '').split('\n').map(plainTex).filter((l) => l && !/^(문제 읽기|한 줄 진단)$/.test(l))[0] || '';
       return `<li><button type="button" data-history="${i}">
         <div class="h-img">${h.images && h.images[0] ? `<img src="${h.images[0]}" alt="">` : ''}${tag}</div>
         <div class="h-body"><b>${esc(h.note || firstLine || '질문')}</b><small>${fmtTime(h.at)}</small></div>

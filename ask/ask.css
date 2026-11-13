@@ -255,19 +255,20 @@ textarea:focus { outline: none; border-color: var(--navy); background: var(--car
   display: inline-block; padding: 8px 16px; border-radius: 10px; background: var(--navy); color: #fff; font-weight: 800;
 }
 .answer h2.final + p .katex { color: #fff; }
-/* 빨간펜: 틀린 지점 인용 */
+/* 학생 풀이 인용: 기본은 중립색, 오답 판정일 때만 빨간펜 */
 .answer blockquote {
   position: relative; margin: 12px 0; padding: 12px 14px 12px 16px;
-  border-left: 3px solid var(--pen); border-radius: 0 10px 10px 0; background: var(--pen-soft);
+  border-left: 3px solid var(--navy); border-radius: 0 10px 10px 0; background: var(--navy-soft);
 }
 .answer blockquote::before {
-  content: "여기서 틀렸어요"; display: block; margin-bottom: 4px;
-  color: var(--pen); font-size: 12px; font-weight: 800;
+  content: "학생 풀이"; display: block; margin-bottom: 4px;
+  color: var(--navy); font-size: 12px; font-weight: 800;
 }
-.answer blockquote p { text-decoration: underline wavy rgba(217, 68, 26, .7); text-decoration-thickness: 1.5px; text-underline-offset: 5px; }
+.answer.wrong blockquote { border-left-color: var(--pen); background: var(--pen-soft); }
+.answer.wrong blockquote::before { content: "여기서 틀렸어요"; color: var(--pen); }
+.answer.wrong blockquote p { text-decoration: underline wavy rgba(217, 68, 26, .7); text-decoration-thickness: 1.5px; text-underline-offset: 5px; }
 .answer.correct blockquote { border-left-color: var(--ok); background: var(--ok-soft); }
-.answer.correct blockquote::before { content: "학생 풀이"; color: var(--ok); }
-.answer.correct blockquote p { text-decoration: none; }
+.answer.correct blockquote::before { color: var(--ok); }
 .answer .caret::after { content: "▍"; color: var(--accent); animation: blink 1s steps(2) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 .answer .err { padding: 14px 16px; border-radius: 12px; background: var(--pen-soft); color: var(--pen); font-weight: 700; }

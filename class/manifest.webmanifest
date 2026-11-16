@@ -1,7 +1,8 @@
 {
   "name": "안강엽 수학",
   "short_name": "안강엽 수학",
-  "description": "안강엽 수학 학생 학습 관리 앱",
+  "description": "안강엽 수학 학생·학부모 학습 관리 앱",
+  "id": "student.html",
   "start_url": "student.html",
   "scope": "./",
   "display": "standalone",

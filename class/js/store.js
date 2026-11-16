@@ -17,7 +17,8 @@
     ? global.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storageKey: `lms-auth-${appName}` } })
     : null;
 
-  const TABLES = ['students', 'assignments', 'submissions', 'materials', 'notices', 'tests', 'scores', 'report_logs'];
+  const TABLES = ['students', 'assignments', 'submissions', 'materials', 'notices', 'tests', 'scores', 'report_logs', 'parents', 'parent_students'];
+  const PARENT_DOMAIN = cfg.PARENT_EMAIL_DOMAIN || 'parent.ankangyeop.com';
   const listeners = [];
   const pad = (n) => String(n).padStart(2, '0');
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
@@ -29,7 +30,7 @@
   const fromDB = (row) => mapKeys(row, toCamel);
   const toDB = (obj) => mapKeys(obj, toSnake);
 
-  const empty = () => ({ students: [], assignments: [], submissions: [], materials: [], notices: [], tests: [], scores: [], report_logs: [], stats: {} });
+  const empty = () => ({ students: [], assignments: [], submissions: [], materials: [], notices: [], tests: [], scores: [], report_logs: [], parents: [], parent_students: [], stats: {} });
   let data = empty();
   let settings = { academyName: '안강엽 수학' };
   let user = null;
@@ -45,6 +46,7 @@
     nowISO: () => new Date().toISOString(),
     toLocalDate: (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
     studentEmail: (loginId) => `${String(loginId).trim().toLowerCase()}@${cfg.STUDENT_EMAIL_DOMAIN}`,
+    parentEmail: (loginId) => `${String(loginId).trim().toLowerCase()}@${PARENT_DOMAIN}`,
 
     /* ---------- 로그인 ---------- */
     async init() {
@@ -70,6 +72,16 @@
     user: () => user,
     isAdmin: () => isAdmin,
     meStudent() { return user ? data.students.find((s) => s.id === user.id) || null : null; },
+    meParent() { return user ? data.parents.find((p) => p.id === user.id) || null : null; },
+    // 학부모 ↔ 자녀
+    childrenOf(parentId) {
+      const ids = data.parent_students.filter((l) => l.parentId === parentId).map((l) => l.studentId);
+      return data.students.filter((s) => ids.includes(s.id)).sort((a, b) => a.name.localeCompare(b.name));
+    },
+    parentsOf(studentId) {
+      const ids = data.parent_students.filter((l) => l.studentId === studentId).map((l) => l.parentId);
+      return data.parents.filter((p) => ids.includes(p.id));
+    },
 
     /* ---------- 불러오기 ---------- */
     async load() {
@@ -85,7 +97,12 @@
         sb.rpc('test_stats'),
       ]);
       const next = empty();
-      TABLES.forEach((t, i) => { next[t] = check(results[i]).map(fromDB); });
+      // 학부모 테이블은 parent-schema.sql 실행 전에는 없으므로 오류가 나도 빈 목록으로
+      const OPTIONAL = ['parents', 'parent_students'];
+      TABLES.forEach((t, i) => {
+        if (results[i].error && OPTIONAL.includes(t)) { console.warn(t, results[i].error.message); next[t] = []; return; }
+        next[t] = check(results[i]).map(fromDB);
+      });
       for (const r of check(results[TABLES.length]) || []) {
         next.stats[r.test_id] = { count: r.count, avg: r.avg === null ? null : Number(r.avg), max: r.max === null ? null : Number(r.max), min: r.min === null ? null : Number(r.min) };
       }
@@ -163,6 +180,47 @@
       check(await sb.from('students').insert({ id: newId, login_id: loginId.trim().toLowerCase(), name, school, class_name: className, parent_phone: parentPhone }));
       await this.load();
     },
+    /* ---------- 학부모 계정 (관리자) ---------- */
+    async createParent({ loginId, password, name = '', studentId }) {
+      const temp = global.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: 'lms-signup-temp' },
+      });
+      const res = await temp.auth.signUp({ email: this.parentEmail(loginId), password });
+      check(res);
+      const newId = res.data.user?.id;
+      if (!newId || (res.data.user.identities && res.data.user.identities.length === 0)) throw new Error('User already registered');
+      check(await sb.from('parents').insert({ id: newId, login_id: loginId.trim().toLowerCase(), name }));
+      if (studentId) check(await sb.from('parent_students').insert({ parent_id: newId, student_id: studentId }));
+      await this.load();
+    },
+    // 이미 있는 학부모 계정에 자녀 추가 (형제·자매)
+    async linkParent(loginId, studentId) {
+      const p = data.parents.find((x) => x.loginId === String(loginId).trim().toLowerCase());
+      if (!p) throw new Error('그 아이디의 학부모 계정이 없어요.');
+      if (data.parent_students.some((l) => l.parentId === p.id && l.studentId === studentId)) throw new Error('이미 연결된 학부모 계정이에요.');
+      check(await sb.from('parent_students').insert({ parent_id: p.id, student_id: studentId }));
+      await this.load();
+    },
+    async unlinkParent(parentId, studentId) {
+      check(await sb.from('parent_students').delete().eq('parent_id', parentId).eq('student_id', studentId));
+      await this.load();
+    },
+    async setParentPassword(id, password) {
+      check(await sb.rpc('admin_set_parent_password', { p_parent: id, p_password: password }));
+    },
+    async deleteParent(id) {
+      check(await sb.rpc('admin_delete_parent', { p_parent: id }));
+      await this.load();
+    },
+    // 학부모가 리포트를 열면 '읽음' 표시 (선생님 화면에 보임)
+    async markReportRead(id) {
+      const r = data.report_logs.find((x) => x.id === id);
+      if (!r || r.readAt) return;
+      r.readAt = this.nowISO();
+      const res = await sb.rpc('parent_mark_report_read', { p_id: id });
+      if (res.error) console.warn(res.error);
+    },
+
     async setStudentPassword(id, password) {
       check(await sb.rpc('admin_set_student_password', { p_student: id, p_password: password }));
     },
@@ -231,6 +289,7 @@
     [/Email not confirmed/i, 'Supabase에서 이메일 확인(Confirm email)을 꺼주세요.'],
     [/Failed to fetch|NetworkError/i, '인터넷 연결을 확인해주세요.'],
     [/row-level security|permission denied/i, '권한이 없어요.'],
+    [/relation .*parent|parent_students|admin_set_parent_password|admin_delete_parent|report_logs_channel_check|Could not find the table/i, '학부모 기능용 DB 설정(supabase/parent-schema.sql)을 먼저 실행해주세요.'],
     [/Payload too large|exceeded the maximum/i, '파일이 너무 커요. (최대 50MB)'],
   ];
 

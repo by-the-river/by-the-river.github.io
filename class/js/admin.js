@@ -357,7 +357,7 @@
               <td class="muted">${esc(s.loginId)}</td>
               <td>${esc(s.school)}</td>
               <td><span class="badge">${esc(s.className)}</span></td>
-              <td>${s.parentPhone ? esc(UI.fmtPhone(s.parentPhone)) : '<span class="badge badge-warn">미등록</span>'}</td>
+              <td>${s.parentPhone ? esc(UI.fmtPhone(s.parentPhone)) : '<span class="badge badge-warn">미등록</span>'}${Store.parentsOf(s.id).length ? ' <span class="badge badge-primary" title="학부모 앱 계정 있음">📱 앱</span>' : ''}</td>
               <td>${done} / ${hw.length}</td>
               <td>${last ? `<b>${last.sc.score}</b> <span class="muted small">${esc(last.t.title)}</span>` : '<span class="muted">-</span>'}</td>
               <td class="actions"><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
@@ -412,13 +412,14 @@
             </div>
             <label class="field span-4"><span>마무리 문구</span><textarea name="closing" rows="2">${esc(rep.closing)}</textarea></label>
           </div>
-          <p class="muted small">💡 [복사] 후 카카오톡에 붙여넣거나, 휴대폰에서 이 화면을 열면 [문자 보내기]로 문자 앱이 바로 열립니다. 아래 문구는 보내기 전에 직접 고칠 수 있어요.</p>
+          <p class="muted small">💡 학부모 앱 계정이 있으면 [학부모 앱으로 보내기]로 학부모님 앱에 바로 전달되고, 읽으면 '읽음 ✓'으로 표시돼요. 또는 [복사] 후 카카오톡에 붙여넣거나, 휴대폰에서 이 화면을 열면 [문자 보내기]로 문자 앱이 바로 열립니다. 아래 문구는 보내기 전에 직접 고칠 수 있어요.</p>
         </section>
         ${noPhone ? `<p class="small" style="color:var(--warn)">⚠️ 학부모 연락처가 없는 학생이 ${noPhone}명 있어요. 이름 옆 [연락처 등록]을 눌러 추가하세요.</p>` : ''}
         <div class="sub-grid">
           ${students.map((s) => {
             const text = buildReport(s);
             const last = Store.where('report_logs', (l) => l.studentId === s.id).sort(byNewest)[0];
+            const hasApp = Store.parentsOf(s.id).length > 0;
             return `
             <div class="card sub-card" data-card="${s.id}">
               <div class="row between">
@@ -427,10 +428,12 @@
               </div>
               <textarea class="report-text" data-text="${s.id}">${esc(text)}</textarea>
               <div class="row between">
-                <span class="muted small" data-last="${s.id}">${last ? `최근 발송 ${UI.fmtDateTime(last.createdAt)} (${last.channel === 'sms' ? '문자' : '복사'})` : '발송 기록 없음'}</span>
-                <span class="row">
+                <span class="muted small" data-last="${s.id}">${lastText(last)}</span>
+                <span class="row wrap">
                   <button class="btn btn-sm" data-copy="${s.id}">📋 복사</button>
-                  ${s.parentPhone ? `<a class="btn btn-sm btn-primary" data-sms="${s.id}" href="#">💬 문자 보내기</a>` : ''}
+                  ${s.parentPhone ? `<a class="btn btn-sm" data-sms="${s.id}" href="#">💬 문자 보내기</a>` : ''}
+                  ${hasApp ? `<button class="btn btn-sm btn-primary" data-app="${s.id}">📱 학부모 앱으로 보내기</button>`
+                    : `<a class="btn btn-sm" href="#students/${s.id}" title="학부모 앱 계정을 만들면 앱으로 바로 보낼 수 있어요">📱 앱 계정 만들기</a>`}
                 </span>
               </div>
             </div>`;
@@ -460,11 +463,22 @@
       const textOf = (sid) => $view.querySelector(`[data-text="${sid}"]`).value;
       const logSend = async (sid, channel) => {
         try {
-          await Store.insert('report_logs', { studentId: sid, channel, periodStart: rep.from, periodEnd: rep.to, content: textOf(sid) });
+          const row = await Store.insert('report_logs', { studentId: sid, channel, periodStart: rep.from, periodEnd: rep.to, content: textOf(sid) });
           const el = $view.querySelector(`[data-last="${sid}"]`);
-          if (el) el.textContent = `최근 발송 ${UI.fmtDateTime(new Date().toISOString())} (${channel === 'sms' ? '문자' : '복사'})`;
-        } catch (e) { console.error(e); }
+          if (el) el.textContent = lastText(row);
+        } catch (e) {
+          console.error(e);
+          if (channel === 'app') throw e; // 앱 발송 실패는 알려야 함
+        }
       };
+      $view.querySelectorAll('[data-app]').forEach((b) => b.onclick = () => {
+        const s = Store.get('students', b.dataset.app);
+        if (!confirm(`${s.name} 학생 학부모님 앱으로 이 리포트를 보낼까요?\n(보낸 뒤에는 학부모님 앱에 바로 표시돼요)`)) return;
+        UI.busy(b, async () => {
+          await logSend(s.id, 'app');
+          UI.toast('학부모 앱으로 보냈어요.');
+        }, '보내는 중...');
+      });
       $view.querySelectorAll('[data-copy]').forEach((b) => b.onclick = async () => {
         const ok = await UI.copyText(textOf(b.dataset.copy));
         if (!ok) return UI.toast('복사에 실패했어요. 직접 선택해서 복사해주세요.', 'error');
@@ -655,6 +669,10 @@
       || '궁금하신 점은 언제든 연락 주세요. 감사합니다.',
   };
   const md = (v) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}`;
+  const CHANNEL = { sms: '문자', copy: '복사', app: '앱' };
+  const lastText = (l) => (l
+    ? `최근 발송 ${UI.fmtDateTime(l.createdAt)} (${CHANNEL[l.channel] || l.channel}${l.channel === 'app' ? (l.readAt ? ' · 읽음 ✓' : ' · 안 읽음') : ''})`
+    : '발송 기록 없음');
   const oneLine = (s) => String(s || '').replace(/\s*\n\s*/g, ' ').trim();
 
   function buildReport(s) {
@@ -710,7 +728,8 @@
           <label class="field span-2"><span>학부모 연락처</span><input type="tel" name="parentPhone" inputmode="tel" placeholder="010-1234-5678" value="${esc(UI.fmtPhone(s.parentPhone))}"></label>
         </div>
         <div class="form-actions"><a class="btn" href="#students">취소</a><button class="btn btn-primary">저장</button></div>
-      </form>`;
+      </form>
+      ${parentSection(s)}`;
     onSubmit(document.getElementById('stuEdit'), async (f) => {
       await Store.update('students', s.id, {
         name: f.name.value.trim(), school: f.school.value.trim(), className: f.className.value.trim(),
@@ -719,6 +738,116 @@
       UI.toast('저장했습니다.');
       history.back();
     }, '저장 중...');
+    bindParentSection(s);
+  }
+
+  /* ---------- 학생 수정 화면: 학부모 앱 계정 ---------- */
+  let justCreated = null; // 방금 만든 학부모 계정 (안내 문구에 비밀번호를 넣기 위해 화면에만 잠깐 보관)
+  const appUrl = () => new URL('student.html', location.href).href.replace(/student\.html$/, '');
+  function parentGuide(s, loginId, pw) {
+    return [
+      `[${Store.settings().academyName}] ${s.name} 학생 학부모님 앱 안내`,
+      '',
+      `아래 주소에서 [학부모] 탭을 눌러 로그인하시면 숙제 제출 현황, 성적, 학습 리포트를 보실 수 있습니다.`,
+      `주소: ${appUrl()}`,
+      `아이디: ${loginId}`,
+      `비밀번호: ${pw || '(따로 안내드린 비밀번호)'}`,
+      '',
+      '로그인 화면의 [바로가기 아이콘 만들기]를 누르면 휴대폰 홈 화면에 앱 아이콘이 생깁니다.',
+    ].join('\n');
+  }
+  function parentSection(s) {
+    const linked = Store.parentsOf(s.id);
+    const taken = (id) => Store.all('parents').some((p) => p.loginId === id);
+    let suggestId = `${s.loginId}_p`;
+    for (let n = 2; taken(suggestId); n += 1) suggestId = `${s.loginId}_p${n}`;
+    const suggestPw = UI.phoneDigits(s.parentPhone).slice(-8);
+    return `
+      <section class="card stack" style="max-width:720px" id="parentBox">
+        <div class="card-title">👪 학부모 앱 계정 <span class="muted small" style="font-weight:500">학부모님은 숙제 제출 여부·성적·리포트만 볼 수 있어요</span></div>
+        ${linked.length ? `<div class="stack">${linked.map((p) => {
+          const kids = Store.childrenOf(p.id).filter((k) => k.id !== s.id).map((k) => k.name);
+          const guide = parentGuide(s, p.loginId, justCreated?.id === p.id ? justCreated.pw : '');
+          return `
+          <div class="sub-card" style="border:1px solid var(--line);border-radius:12px;padding:12px">
+            <div class="row between wrap">
+              <span><b>${esc(p.loginId)}</b> ${p.name ? `<span class="muted small">${esc(p.name)}</span>` : ''}${kids.length ? ` <span class="badge">형제: ${esc(kids.join(', '))}</span>` : ''}</span>
+              <span class="row wrap">
+                <button type="button" class="btn btn-sm" data-ppw="${p.id}">비밀번호 변경</button>
+                <button type="button" class="btn btn-sm" data-unlink="${p.id}">연결 해제</button>
+                <button type="button" class="btn btn-sm btn-danger" data-pdel="${p.id}">계정 삭제</button>
+              </span>
+            </div>
+            <textarea class="report-text" rows="7" data-guide="${p.id}" style="margin-top:8px">${esc(guide)}</textarea>
+            <div class="row" style="justify-content:flex-end;margin-top:6px">
+              <button type="button" class="btn btn-sm" data-gcopy="${p.id}">📋 안내 문구 복사</button>
+              ${s.parentPhone ? `<a class="btn btn-sm btn-primary" data-gsms="${p.id}" href="#">💬 문자로 보내기</a>` : ''}
+            </div>
+          </div>`;
+        }).join('')}</div>` : '<p class="muted small">아직 학부모 계정이 없어요.</p>'}
+        <details ${linked.length ? '' : 'open'}>
+          <summary class="small" style="cursor:pointer;font-weight:700">＋ 새 학부모 계정 만들기</summary>
+          <form id="parentForm" class="stack" style="margin-top:10px">
+            <div class="form-grid">
+              <label class="field"><span>학부모 아이디 (영문·숫자)</span><input type="text" name="loginId" required pattern="[A-Za-z0-9._\\-]{3,30}" title="영문, 숫자 3~30자" autocapitalize="off" value="${esc(suggestId)}"></label>
+              <label class="field"><span>비밀번호 (6자 이상)</span><input type="text" name="password" required minlength="6" autocomplete="off" value="${esc(suggestPw)}" placeholder="예) 휴대폰 번호 뒤 8자리"></label>
+              <label class="field span-2"><span>호칭 (선택)</span><input type="text" name="name" placeholder="예) 어머니, 아버지"></label>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary">학부모 계정 만들기</button></div>
+          </form>
+        </details>
+        <details>
+          <summary class="small" style="cursor:pointer;font-weight:700">🔗 형제·자매의 학부모 계정에 연결하기</summary>
+          <form id="linkForm" class="row wrap" style="margin-top:10px">
+            <input type="text" name="loginId" required placeholder="이미 있는 학부모 아이디" autocapitalize="off" list="parentIds" style="flex:1;min-width:180px">
+            <datalist id="parentIds">${Store.all('parents').filter((p) => !linked.includes(p)).map((p) => `<option value="${esc(p.loginId)}">`).join('')}</datalist>
+            <button class="btn">연결</button>
+          </form>
+        </details>
+      </section>`;
+  }
+  function bindParentSection(s) {
+    const box = document.getElementById('parentBox');
+    if (!box) return;
+    const pName = (id) => Store.get('parents', id)?.loginId || '';
+    onSubmit(document.getElementById('parentForm'), async (f) => {
+      const loginId = f.loginId.value.trim().toLowerCase();
+      await Store.createParent({ loginId, password: f.password.value, name: f.name.value.trim(), studentId: s.id });
+      const p = Store.all('parents').find((x) => x.loginId === loginId);
+      if (p) justCreated = { id: p.id, pw: f.password.value };
+      UI.toast('학부모 계정을 만들었어요. 안내 문구를 보내 주세요.');
+    }, '만드는 중...');
+    onSubmit(document.getElementById('linkForm'), async (f) => {
+      await Store.linkParent(f.loginId.value, s.id);
+      UI.toast('연결했어요.');
+    }, '연결 중...');
+    const btns = (sel, fn) => box.querySelectorAll(sel).forEach((b) => {
+      b.onclick = () => UI.busy(b, async () => { if ((await fn(b)) !== false) render(); });
+    });
+    btns('[data-ppw]', async (b) => {
+      const pw = prompt(`학부모 계정(${pName(b.dataset.ppw)})의 새 비밀번호 (6자 이상)`);
+      if (pw === null) return false;
+      if (pw.length < 6) { UI.toast('비밀번호는 6자 이상이어야 해요.', 'error'); return false; }
+      await Store.setParentPassword(b.dataset.ppw, pw);
+      justCreated = { id: b.dataset.ppw, pw };
+      UI.toast('비밀번호를 변경했어요.');
+    });
+    btns('[data-unlink]', async (b) => {
+      if (!confirm(`학부모 계정(${pName(b.dataset.unlink)})과 ${s.name} 학생의 연결을 끊을까요?\n계정은 남아 있어요.`)) return false;
+      await Store.unlinkParent(b.dataset.unlink, s.id);
+      UI.toast('연결을 해제했어요.');
+    });
+    btns('[data-pdel]', async (b) => {
+      if (!confirm(`학부모 계정(${pName(b.dataset.pdel)})을 삭제할까요?\n연결된 모든 자녀와의 연결도 사라지고 되돌릴 수 없어요.`)) return false;
+      await Store.deleteParent(b.dataset.pdel);
+      UI.toast('삭제했어요.');
+    });
+    const guideOf = (id) => box.querySelector(`[data-guide="${id}"]`).value;
+    box.querySelectorAll('[data-gcopy]').forEach((b) => b.onclick = async () => {
+      const ok = await UI.copyText(guideOf(b.dataset.gcopy));
+      UI.toast(ok ? '복사했어요. 카카오톡 등에 붙여넣으세요.' : '복사에 실패했어요.', ok ? 'ok' : 'error');
+    });
+    box.querySelectorAll('[data-gsms]').forEach((a) => a.onclick = () => { a.href = UI.smsHref(s.parentPhone, guideOf(a.dataset.gsms)); });
   }
 
   function statusBadge(s, a) {

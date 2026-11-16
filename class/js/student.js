@@ -4,10 +4,27 @@
   const $view = document.getElementById('view');
   const $title = document.getElementById('appTitle');
   const $back = document.getElementById('backBtn');
+  const $tabbar = document.getElementById('tabbar');
   const { esc, nl2br } = UI;
-  let me = null;
+  let me = null;      // 학생 본인 (학부모로 로그인하면 지금 보고 있는 자녀)
+  let parent = null;  // 학부모로 로그인했을 때 학부모 정보
 
-  const TITLES = { home: '홈', homework: '숙제', materials: '자료실', notices: '공지사항', scores: '성적', ask: '질문하기' };
+  const TITLES = { home: '홈', homework: '숙제', materials: '자료실', notices: '공지사항', scores: '성적', ask: '질문하기', reports: '선생님 리포트' };
+  const TABS = {
+    student: [['home', '🏠', '홈'], ['homework', '📝', '숙제'], ['materials', '📚', '자료실'], ['scores', '📊', '성적'], ['ask', '🙋', '질문']],
+    parent: [['home', '🏠', '홈'], ['reports', '📨', '리포트'], ['homework', '📝', '숙제'], ['scores', '📊', '성적']],
+  };
+  let tabRole = null;
+  function drawTabs(role) {
+    if (tabRole === role) return;
+    tabRole = role;
+    const tabs = TABS[role];
+    $tabbar.style.gridTemplateColumns = `repeat(${tabs.length}, 1fr)`;
+    $tabbar.innerHTML = tabs.map(([k, icon, label]) => `
+      <a href="#${k}" data-tab="${k}"><span class="ti">${icon}</span>${label}${
+        k === 'homework' && role === 'student' ? '<i class="dot hidden" id="hwDot"></i>' : ''}${
+        k === 'reports' ? '<i class="dot hidden" id="repDot"></i>' : ''}</a>`).join('');
+  }
 
   /* ---------- 데이터 헬퍼 ---------- */
   const myAssignments = () => Store.where('assignments', (a) => Store.targets(a, me.className))
@@ -32,53 +49,97 @@
 
   /* ---------- 라우팅 ---------- */
   function render() {
-    me = Store.meStudent();
-    document.body.classList.toggle('logged-out', !me);
-    if (!me) return renderLogin();
+    const stu = Store.meStudent();
+    parent = stu ? null : Store.meParent();
+    if (parent) {
+      const kids = Store.childrenOf(parent.id);
+      me = kids.find((k) => k.id === lsGet('parent-child', null)) || kids[0] || null;
+    } else me = stu;
+    document.body.classList.toggle('logged-out', !stu && !parent);
+    if (!stu && !parent) return renderLogin();
 
+    const role = parent ? 'parent' : 'student';
+    drawTabs(role);
+    const R = parent ? parentRoutes : routes;
     const [route = 'home', param] = location.hash.slice(1).split('/');
-    const view = routes[route] ? route : 'home';
-    document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.tab === view));
+    const view = R[route] ? route : 'home';
+    $tabbar.querySelectorAll('a').forEach((a) => a.classList.toggle('active', a.dataset.tab === view));
     $title.textContent = TITLES[view];
     $back.classList.toggle('hidden', !param);
-    document.getElementById('hwDot').classList.toggle('hidden',
-      !myAssignments().some((a) => !mySub(a.id) && !UI.isOverdue(a.dueDate)));
-    routes[view](param);
+
+    if (parent && !me) {
+      $view.innerHTML = `<div class="card stack" style="text-align:center;margin-top:30px">
+        <div style="font-size:36px">👪</div><b>연결된 학생이 아직 없어요</b>
+        <p class="muted small">선생님께 자녀 연결을 요청해 주세요.</p></div>`;
+      return;
+    }
+    if (parent) {
+      document.getElementById('repDot')?.classList.toggle('hidden', !myReports().some((r) => !r.readAt));
+    } else {
+      document.getElementById('hwDot')?.classList.toggle('hidden',
+        !myAssignments().some((a) => !mySub(a.id) && !UI.isOverdue(a.dueDate)));
+    }
+    R[view](param);
     UI.hydrateImages($view);
   }
 
-  /* ---------- 로그인 ---------- */
+  /* ---------- 로그인 (학생 / 학부모 탭) ---------- */
+  let loginRole = null;
   function renderLogin() {
+    if (!loginRole) loginRole = lsGet('login-role', 'student') === 'parent' ? 'parent' : 'student';
+    const isP = loginRole === 'parent';
     $view.innerHTML = `
       <div class="login">
         <div class="logo">📘</div>
         <h2>${esc(Store.settings().academyName)}</h2>
-        <p class="muted">학생 학습 관리 앱</p>
+        <p class="muted">${isP ? '학부모님 · 자녀 학습 현황과 선생님 리포트' : '학생 학습 관리 앱'}</p>
+        <div class="login-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected="${!isP}" class="${isP ? '' : 'on'}" data-role="student">🎒 학생</button>
+          <button type="button" role="tab" aria-selected="${isP}" class="${isP ? 'on' : ''}" data-role="parent">👪 학부모</button>
+        </div>
         <form id="loginForm" class="card stack">
-          <label class="field"><span>아이디</span>
-            <input type="text" name="loginId" autocomplete="username" autocapitalize="off" required placeholder="선생님께 받은 아이디">
+          <label class="field"><span>${isP ? '학부모 아이디' : '아이디'}</span>
+            <input type="text" name="loginId" autocomplete="username" autocapitalize="off" required placeholder="${isP ? '선생님께 받은 학부모 아이디' : '선생님께 받은 아이디'}">
           </label>
           <label class="field"><span>비밀번호</span>
             <input type="password" name="pw" autocomplete="current-password" required>
           </label>
-          <button class="btn btn-primary btn-block">로그인</button>
+          <button class="btn btn-primary btn-block">${isP ? '학부모 로그인' : '로그인'}</button>
         </form>
-        <p class="hint muted small">아이디·비밀번호를 모르면 선생님께 문의하세요.</p>
+        <p class="hint muted small">${isP ? '학부모 아이디는 자녀 아이디와 달라요. 모르면 선생님께 문의하세요.' : '아이디·비밀번호를 모르면 선생님께 문의하세요.'}</p>
+        <div class="install-box" id="installBox">${Install.button()}</div>
       </div>`;
+    Install.bind($view);
+    $view.querySelectorAll('[data-role]').forEach((b) => b.onclick = () => {
+      loginRole = b.dataset.role; lsSet('login-role', loginRole); renderLogin();
+    });
     document.getElementById('loginForm').onsubmit = (e) => {
       e.preventDefault();
       const f = e.target;
       UI.busy(e.submitter, async () => {
-        await Store.signIn(Store.studentEmail(f.loginId.value), f.pw.value);
-        if (!Store.meStudent()) {
-          await Store.signOut();
-          throw new Error('학생 계정이 아니에요. 선생님은 관리자 웹을 이용해주세요.');
+        if (isP) {
+          await Store.signIn(Store.parentEmail(f.loginId.value), f.pw.value);
+          if (!Store.meParent()) {
+            await Store.signOut();
+            throw new Error('학부모 계정이 아니에요. 학생은 [학생] 탭에서 로그인해 주세요.');
+          }
+        } else {
+          await Store.signIn(Store.studentEmail(f.loginId.value), f.pw.value);
+          if (!Store.meStudent()) {
+            await Store.signOut();
+            throw new Error('학생 계정이 아니에요. 학부모님은 [학부모] 탭에서 로그인해 주세요.');
+          }
         }
         location.hash = '#home';
         render();
       }, '로그인 중...');
     };
   }
+  // 아이콘 설치 상태가 바뀌면 로그인 화면의 버튼만 갱신 (입력 중인 내용은 그대로)
+  Install.onChange(() => {
+    const box = document.getElementById('installBox');
+    if (box) { box.innerHTML = Install.button(); Install.bind(box); }
+  });
 
   /* ---------- 화면들 ---------- */
   const routes = {
@@ -198,7 +259,7 @@
         <section class="card chart">
           <div class="card-title">점수 추이</div>
           ${chartSVG(graded)}
-          <div class="legend"><span><i style="background:var(--primary)"></i>내 점수</span><span><i style="background:#b8bdc9"></i>반 평균</span></div>
+          <div class="legend"><span><i style="background:var(--primary)"></i>${parent ? `${esc(me.name)} 점수` : '내 점수'}</span><span><i style="background:#b8bdc9"></i>반 평균</span></div>
         </section>` : ''}
         <div class="list">
           ${rows.length ? rows.slice().reverse().map(({ t, s, st }) => `
@@ -665,6 +726,142 @@
     const hide = document.getElementById('hideAll');
     if (hide) hide.onclick = () => go(1);
   }
+
+  /* ============================================================
+   * 학부모 화면 (읽기 전용: 자녀 숙제 제출 여부, 성적, 선생님 리포트)
+   *  - me = 지금 보고 있는 자녀 → 성적 화면은 학생 화면을 그대로 씀
+   * ============================================================ */
+  const myReports = () => Store.where('report_logs', (r) => r.studentId === me.id && r.channel === 'app')
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const reportTitle = (r) => (r.periodStart && r.periodEnd
+    ? `${UI.fmtDate(r.periodStart)} ~ ${UI.fmtDate(r.periodEnd)} 리포트` : '학습 리포트');
+
+  function parentHwStatus(a) {
+    const s = mySub(a.id);
+    if (!s) return UI.isOverdue(a.dueDate)
+      ? '<span class="badge badge-danger">미제출</span>'
+      : `<span class="badge badge-warn">진행 중 ${UI.dday(a.dueDate)}</span>`;
+    const late = UI.isLate(a.dueDate, s.submittedAt) ? ' <span class="badge badge-warn">지각</span>' : '';
+    return (s.status === 'checked' ? '<span class="badge badge-success">확인완료</span>' : '<span class="badge badge-primary">제출완료</span>') + late;
+  }
+  const reportItem = (r) => `
+    <a class="list-item" href="#reports/${r.id}">
+      <div class="icon-box">📨</div>
+      <div class="grow">
+        <div class="title ellipsis">${esc(reportTitle(r))} ${r.readAt ? '' : '<span class="badge badge-new">N</span>'}</div>
+        <div class="sub">${UI.fmtDateTime(r.createdAt)} 받음</div>
+      </div>
+      <span class="chev">›</span>
+    </a>`;
+  const parentHwItem = (a) => `
+    <a class="list-item" href="#homework/${a.id}">
+      <div class="grow"><div class="title ellipsis">${esc(a.title)}</div><div class="sub">마감 ${UI.fmtDate(a.dueDate)}</div></div>
+      <span class="row" style="gap:4px;flex-shrink:0">${parentHwStatus(a)}</span>
+    </a>`;
+
+  const parentRoutes = {
+    home() {
+      const kids = Store.childrenOf(parent.id);
+      const hw = myAssignments();
+      const past = hw.filter((a) => UI.isOverdue(a.dueDate));
+      const pastDone = past.filter((a) => mySub(a.id)).length;
+      const missed = past.length - pastDone;
+      const recent = hw.slice().reverse().slice(0, 4);
+      const reports = myReports();
+      const scored = myTests().map((t) => ({ t, s: Store.scoreOf(t.id, me.id), st: Store.testStats(t.id) })).filter((x) => hasScore(x.s));
+      const latest = scored[scored.length - 1];
+
+      $view.innerHTML = `
+        ${kids.length > 1 ? `<div class="chips">${kids.map((k) => `<button type="button" class="chip ${k.id === me.id ? 'active' : ''}" data-child="${k.id}">${esc(k.name)}</button>`).join('')}</div>` : ''}
+        <section class="card hello">
+          <h2>${esc(me.name)} 학생 학습 현황</h2>
+          <p>${esc(me.school)}${me.school ? ' · ' : ''}${esc(me.className)}</p>
+          <div class="stats">
+            <a href="#homework"><b>${past.length ? `${pastDone}/${past.length}` : '-'}</b><span>숙제 제출</span></a>
+            <a href="#homework"><b>${missed}</b><span>미제출</span></a>
+            <a href="#scores"><b>${latest ? latest.s.score : '-'}</b><span>최근 점수</span></a>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-label row between"><span>📨 선생님 리포트</span><a href="#reports" class="small">전체보기</a></div>
+          <div class="list">${reports.length ? reports.slice(0, 2).map(reportItem).join('') : '<div class="empty">아직 받은 리포트가 없어요</div>'}</div>
+        </section>
+
+        <section>
+          <div class="section-label row between"><span>📝 최근 숙제</span><a href="#homework" class="small">전체보기</a></div>
+          <div class="list">${recent.length ? recent.map(parentHwItem).join('') : '<div class="empty">숙제가 없어요</div>'}</div>
+        </section>
+
+        ${latest ? `
+        <section>
+          <div class="section-label row between"><span>📊 최근 테스트</span><a href="#scores" class="small">전체보기</a></div>
+          <a class="card row" href="#scores/${latest.t.id}">
+            <div class="grow"><div style="font-weight:700">${esc(latest.t.title)}</div><div class="muted small">${UI.fmtDate(latest.t.date)}${latest.st.avg !== null ? ` · 반 평균 ${latest.st.avg}` : ''}</div></div>
+            <div class="score-pill">${latest.s.score}<span class="muted small"> / ${latest.t.maxScore}</span></div>
+          </a>
+        </section>` : ''}`;
+      $view.querySelectorAll('[data-child]').forEach((b) => b.onclick = () => { lsSet('parent-child', b.dataset.child); render(); });
+    },
+
+    reports(id) {
+      if (id) {
+        const r = Store.get('report_logs', id);
+        if (!r || r.studentId !== me.id) { location.hash = '#reports'; return; }
+        $view.innerHTML = `
+          <article class="card stack">
+            <div class="detail-head">
+              <p class="muted small">${esc(me.name)} · ${UI.fmtDateTime(r.createdAt)} 받음</p>
+              <h2 style="margin-top:4px">${esc(reportTitle(r))}</h2>
+            </div>
+            <hr style="border:0;border-top:1px solid var(--line);margin:4px 0">
+            <div class="detail-body report-body">${nl2br(r.content)}</div>
+          </article>`;
+        Store.markReportRead(r.id).then(() => {
+          document.getElementById('repDot')?.classList.toggle('hidden', !myReports().some((x) => !x.readAt));
+        });
+        return;
+      }
+      const list = myReports();
+      $view.innerHTML = `<div class="list">${list.length ? list.map(reportItem).join('') : '<div class="empty">아직 받은 리포트가 없어요</div>'}</div>`;
+    },
+
+    homework(id) {
+      if (id) {
+        const a = Store.get('assignments', id);
+        if (!a) { location.hash = '#homework'; return; }
+        const s = mySub(a.id);
+        $view.innerHTML = `
+          <section class="card stack">
+            <div class="detail-head">
+              <div class="row wrap">${parentHwStatus(a)}<span class="muted small">마감 ${UI.fmtDate(a.dueDate)}</span></div>
+              <h2 style="margin-top:8px">${esc(a.title)}</h2>
+            </div>
+            ${a.description ? `<div class="detail-body">${nl2br(a.description)}</div>` : ''}
+          </section>
+          <section class="card stack">
+            <div class="card-title">제출 현황</div>
+            ${s ? `
+              <p>${UI.fmtDateTime(s.submittedAt)} 제출 · 파일 ${s.files?.length || 0}개</p>
+              ${s.feedback ? `<div class="feedback-box"><strong>선생님 피드백</strong>${nl2br(s.feedback)}</div>` : ''}
+              ${s.status === 'checked' && !s.feedback ? '<div class="feedback-box"><strong>선생님 확인 완료</strong>확인했어요 👍</div>' : ''}
+              ${s.status !== 'checked' ? '<p class="muted small">선생님이 확인하기 전이에요.</p>' : ''}`
+            : `<p class="muted">${UI.isOverdue(a.dueDate) ? '마감일까지 제출하지 않았어요.' : '아직 제출하지 않았어요.'}</p>`}
+          </section>`;
+        return;
+      }
+      const all = myAssignments();
+      const open = all.filter((a) => !UI.isOverdue(a.dueDate));
+      const past = all.filter((a) => UI.isOverdue(a.dueDate)).reverse();
+      $view.innerHTML = `
+        <div class="section-label">진행 중인 숙제 ${open.length}</div>
+        <div class="list">${open.length ? open.map(parentHwItem).join('') : '<div class="empty">진행 중인 숙제가 없어요</div>'}</div>
+        <div class="section-label">지난 숙제 ${past.length}</div>
+        <div class="list">${past.length ? past.map(parentHwItem).join('') : '<div class="empty">지난 숙제가 없어요</div>'}</div>`;
+    },
+
+    scores(id) { return routes.scores(id); },
+  };
 
   /* ---------- 시작 ---------- */
   $back.onclick = () => history.back();

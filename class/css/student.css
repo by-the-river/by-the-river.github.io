@@ -156,3 +156,23 @@ a.list-item:active, button.list-item:active { background: var(--surface-2); }
 .ask-md.wrong blockquote { border-left-color: var(--danger); background: var(--danger-weak); }
 .ask-md.wrong blockquote::before { content: '여기서 틀렸어요'; display: block; font-size: 12px; font-weight: 800; color: var(--danger); margin-bottom: 2px; }
 .ask-md.correct blockquote { border-left-color: var(--success); background: var(--success-weak); }
+
+/* ---------- 로그인: 학생 / 학부모 탭 ---------- */
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 24px; padding: 4px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+.login-tabs button { border: 0; background: transparent; border-radius: 9px; padding: 10px; font-size: 15px; font-weight: 700; color: var(--muted); }
+.login-tabs button.on { background: var(--surface); color: var(--primary); box-shadow: var(--shadow); }
+.login .login-tabs + form { margin-top: 12px; }
+
+/* ---------- 바로가기 아이콘 만들기 ---------- */
+.install-box { margin-top: 22px; }
+.install-btn { border: 1.5px dashed var(--primary); color: var(--primary); background: var(--primary-weak); font-weight: 700; }
+.install-sub { margin-top: 6px; text-align: center; }
+.install-guide { position: fixed; inset: 0; z-index: 100; background: rgba(20, 26, 40, .45); display: flex; align-items: flex-end; justify-content: center; }
+.ig-sheet { width: 100%; max-width: 480px; background: var(--surface); border-radius: 18px 18px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 12px; animation: igup .2s ease-out; }
+@keyframes igup { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+.ig-head { display: flex; align-items: center; justify-content: space-between; font-size: 17px; }
+.ig-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 10px; font-size: 15px; line-height: 1.55; }
+.ig-ico { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--primary-weak); color: var(--primary); font-weight: 800; }
+
+/* ---------- 학부모: 리포트 ---------- */
+.report-body { font-size: 15px; line-height: 1.75; word-break: keep-all; }

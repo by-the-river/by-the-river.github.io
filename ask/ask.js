@@ -207,10 +207,12 @@
   function renderMd(src) {
     const maths = [];
     const keep = (tex, display) => { maths.push({ tex, display }); return `@@M${maths.length - 1}@@`; };
-    const text = src
+    const graphs = window.AskGraph ? AskGraph.extract(src) : { text: src, list: [] };
+    const text = graphs.text
       .replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, (_, a, b) => keep(a ?? b, true))
       .replace(/\\\(([\s\S]+?)\\\)|\$([^$\n]+?)\$/g, (_, a, b) => keep(a ?? b, false));
-    const html = DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
+    let html = DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
+    if (window.AskGraph) html = AskGraph.inject(html, graphs.list);
     return html.replace(/@@M(\d+)@@/g, (_, i) => {
       const m = maths[+i];
       try { return katex.renderToString(m.tex, { displayMode: m.display, throwOnError: false }); }
@@ -220,7 +222,7 @@
   const stripVerdict = (s) => s.replace(/^\s*판정:[^\n]*\n?/, '');
   // 기록 목록용 한 줄 미리보기: 수식 코드를 읽기 쉬운 글자로
   const TEX = { le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', theta: 'θ', infty: '∞', cdot: '·', times: '×', pm: '±', to: '→', sqrt: '√', lim: ' lim', sin: ' sin', cos: ' cos', tan: ' tan', ln: ' ln', log: ' log' };
-  const plainTex = (s) => String(s || '')
+  const plainTex = (s) => (window.AskGraph ? AskGraph.strip(s) : String(s || ''))
     .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
     .replace(/\\([a-zA-Z]+)/g, (_, w) => TEX[w] ?? '')
     .replace(/\^\{?2\}?/g, '²').replace(/\^\{?3\}?/g, '³')

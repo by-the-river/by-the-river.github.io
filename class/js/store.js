@@ -535,10 +535,12 @@
       if (!global.marked || !global.DOMPurify || !global.katex) return `<p>${UI.nl2br(text0)}</p>`;
       const maths = [];
       const keep = (tex, display) => { maths.push({ tex, display }); return `@@M${maths.length - 1}@@`; };
-      const text = text0
+      const graphs = global.AskGraph ? global.AskGraph.extract(text0) : { text: text0, list: [] };
+      const text = graphs.text
         .replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/g, (_, a, b) => keep(a ?? b, true))
         .replace(/\\\(([\s\S]+?)\\\)|\$([^$\n]+?)\$/g, (_, a, b) => keep(a ?? b, false));
-      const html = global.DOMPurify.sanitize(global.marked.parse(text, { breaks: true, gfm: true }));
+      let html = global.DOMPurify.sanitize(global.marked.parse(text, { breaks: true, gfm: true }));
+      if (global.AskGraph) html = global.AskGraph.inject(html, graphs.list);
       return html.replace(/@@M(\d+)@@/g, (_, i) => {
         const m = maths[+i];
         try { return global.katex.renderToString(m.tex, { displayMode: m.display, throwOnError: false }); }
@@ -549,7 +551,7 @@
     // 한 줄 미리보기용: 수식 코드를 읽기 쉬운 글자로 (\dfrac{n}{\pi^2} → n/π²)
     plainTex(s) {
       const TEX = { le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', theta: 'θ', infty: '∞', cdot: '·', times: '×', pm: '±', to: '→', sqrt: '√', lim: ' lim', sin: ' sin', cos: ' cos', tan: ' tan', ln: ' ln', log: ' log' };
-      return String(s || '')
+      return (global.AskGraph ? global.AskGraph.strip(s) : String(s || ''))
         .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, '$1/$2')
         .replace(/\\([a-zA-Z]+)/g, (_, w) => TEX[w] ?? '')
         .replace(/\^\{?2\}?/g, '²').replace(/\^\{?3\}?/g, '³')

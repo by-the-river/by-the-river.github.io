@@ -805,6 +805,20 @@
 
   /* ---------- 학생 수정 화면: 학부모 앱 계정 ---------- */
   let justCreated = null; // 방금 만든 학부모 계정 (안내 문구에 비밀번호를 넣기 위해 화면에만 잠깐 보관)
+  // 기본 비밀번호 = 학부모 연락처 뒤 8자리. 다른 비밀번호로 만들거나 바꾼 계정은 이 브라우저에 표시해 둠
+  const defaultParentPw = (s) => UI.phoneDigits(s.parentPhone).slice(-8);
+  const PW_CUSTOM_KEY = 'lms_parent_pw_custom';
+  const pwCustom = () => { try { return JSON.parse(localStorage.getItem(PW_CUSTOM_KEY)) || {}; } catch (e) { return {}; } };
+  const markPw = (parentId, s, pw) => {
+    const m = pwCustom();
+    if (pw === defaultParentPw(s)) delete m[parentId]; else m[parentId] = true;
+    try { localStorage.setItem(PW_CUSTOM_KEY, JSON.stringify(m)); } catch (e) { /* 무시 */ }
+  };
+  const guidePw = (p, s) => {
+    if (justCreated?.id === p.id) return justCreated.pw;
+    const d = defaultParentPw(s);
+    return !pwCustom()[p.id] && d.length >= 6 ? d : '';
+  };
   const appUrl = () => new URL('student.html', location.href).href.replace(/student\.html$/, '');
   function parentGuide(s, loginId, pw) {
     return [
@@ -829,7 +843,7 @@
         <div class="card-title">👪 학부모 앱 계정 <span class="muted small" style="font-weight:500">학부모님은 숙제 제출 여부·성적·리포트만 볼 수 있어요</span></div>
         ${linked.length ? `<div class="stack">${linked.map((p) => {
           const kids = Store.childrenOf(p.id).filter((k) => k.id !== s.id).map((k) => k.name);
-          const guide = parentGuide(s, p.loginId, justCreated?.id === p.id ? justCreated.pw : '');
+          const guide = parentGuide(s, p.loginId, guidePw(p, s));
           return `
           <div class="sub-card" style="border:1px solid var(--line);border-radius:12px;padding:12px">
             <div class="row between wrap">
@@ -876,7 +890,7 @@
       const loginId = f.loginId.value.trim().toLowerCase();
       await Store.createParent({ loginId, password: f.password.value, name: f.name.value.trim(), studentId: s.id });
       const p = Store.all('parents').find((x) => x.loginId === loginId);
-      if (p) justCreated = { id: p.id, pw: f.password.value };
+      if (p) { justCreated = { id: p.id, pw: f.password.value }; markPw(p.id, s, f.password.value); }
       UI.toast('학부모 계정을 만들었어요. 안내 문구를 보내 주세요.');
     }, '만드는 중...');
     onSubmit(document.getElementById('linkForm'), async (f) => {
@@ -892,6 +906,7 @@
       if (pw.length < 6) { UI.toast('비밀번호는 6자 이상이어야 해요.', 'error'); return false; }
       await Store.setParentPassword(b.dataset.ppw, pw);
       justCreated = { id: b.dataset.ppw, pw };
+      markPw(b.dataset.ppw, s, pw);
       UI.toast('비밀번호를 변경했어요.');
     });
     btns('[data-unlink]', async (b) => {

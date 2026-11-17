@@ -27,13 +27,13 @@
   }
 
   /* ---------- 데이터 헬퍼 ---------- */
-  const myAssignments = () => Store.where('assignments', (a) => Store.targets(a, me.className))
+  const myAssignments = () => Store.where('assignments', (a) => Store.targets(a, me.classNames))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const myNotices = () => Store.where('notices', (n) => Store.targets(n, me.className))
+  const myNotices = () => Store.where('notices', (n) => Store.targets(n, me.classNames))
     .sort((a, b) => (b.pinned - a.pinned) || b.createdAt.localeCompare(a.createdAt));
-  const myMaterials = () => Store.where('materials', (m) => Store.targets(m, me.className))
+  const myMaterials = () => Store.where('materials', (m) => Store.targets(m, me.classNames))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const myTests = () => Store.where('tests', (t) => Store.targets(t, me.className))
+  const myTests = () => Store.where('tests', (t) => Store.targets(t, me.classNames))
     .sort((a, b) => a.date.localeCompare(b.date));
   const mySub = (aid) => Store.submissionOf(aid, me.id);
   const hasScore = (s) => s && s.score !== null && s.score !== undefined;
@@ -154,7 +154,7 @@
       $view.innerHTML = `
         <section class="card hello">
           <h2>${esc(me.name)}님, 안녕하세요 👋</h2>
-          <p>${esc(me.school)}${me.school ? ' · ' : ''}${esc(me.className)}</p>
+          <p>${esc(me.school)}${me.school ? ' · ' : ''}${esc(Store.classLabel(me))}</p>
           <div class="stats">
             <a href="#homework"><b>${todo.length}</b><span>남은 숙제</span></a>
             <a href="#homework"><b>${newFeedback}</b><span>받은 피드백</span></a>
@@ -252,12 +252,19 @@
 
     scores(id) {
       if (id) return scoreDetail(id);
-      const rows = myTests().map((t) => ({ t, s: Store.scoreOf(t.id, me.id), st: Store.testStats(t.id) }));
-      const graded = rows.filter((r) => hasScore(r.s));
-      $view.innerHTML = `
+      const all = myTests().map((t) => ({ t, s: Store.scoreOf(t.id, me.id), st: Store.testStats(t.id) }));
+      // 여러 반을 듣는 학생은 반별로 나눠서 보여 줌
+      const groups = me.classNames.length > 1
+        ? me.classNames.map((c) => ({ c, rows: all.filter((r) => r.t.className === c) })).filter((g) => g.rows.length)
+        : [{ c: '', rows: all }];
+      if (!groups.length) groups.push({ c: '', rows: [] });
+      $view.innerHTML = groups.map(({ c, rows }) => {
+        const graded = rows.filter((r) => hasScore(r.s));
+        return `
+        ${c ? `<div class="section-label">📘 ${esc(c)}</div>` : ''}
         ${graded.length >= 2 ? `
         <section class="card chart">
-          <div class="card-title">점수 추이</div>
+          <div class="card-title">점수 추이${c ? ` · ${esc(c)}` : ''}</div>
           ${chartSVG(graded)}
           <div class="legend"><span><i style="background:var(--primary)"></i>${parent ? `${esc(me.name)} 점수` : '내 점수'}</span><span><i style="background:#b8bdc9"></i>반 평균</span></div>
         </section>` : ''}
@@ -274,6 +281,7 @@
               <span class="chev">›</span>
             </a>`).join('') : '<div class="empty">아직 테스트 기록이 없어요</div>'}
         </div>`;
+      }).join('');
     },
 
     /* ---------- 질문하기 (질문노트와 같은 서버, 풀이는 단계별로 열기) ---------- */
@@ -775,7 +783,7 @@
         ${kids.length > 1 ? `<div class="chips">${kids.map((k) => `<button type="button" class="chip ${k.id === me.id ? 'active' : ''}" data-child="${k.id}">${esc(k.name)}</button>`).join('')}</div>` : ''}
         <section class="card hello">
           <h2>${esc(me.name)} 학생 학습 현황</h2>
-          <p>${esc(me.school)}${me.school ? ' · ' : ''}${esc(me.className)}</p>
+          <p>${esc(me.school)}${me.school ? ' · ' : ''}${esc(Store.classLabel(me))}</p>
           <div class="stats">
             <a href="#homework"><b>${past.length ? `${pastDone}/${past.length}` : '-'}</b><span>숙제 제출</span></a>
             <a href="#homework"><b>${missed}</b><span>미제출</span></a>

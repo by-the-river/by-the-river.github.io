@@ -103,6 +103,10 @@
         if (results[i].error && OPTIONAL.includes(t)) { console.warn(t, results[i].error.message); next[t] = []; return; }
         next[t] = check(results[i]).map(fromDB);
       });
+      // 학생의 반 목록 (multi-class-schema.sql 실행 전이면 class_name 하나로)
+      next.students.forEach((s) => {
+        s.classNames = Array.isArray(s.classNames) && s.classNames.length ? s.classNames : (s.className ? [s.className] : []);
+      });
       for (const r of check(results[TABLES.length]) || []) {
         next.stats[r.test_id] = { count: r.count, avg: r.avg === null ? null : Number(r.avg), max: r.max === null ? null : Number(r.max), min: r.min === null ? null : Number(r.min) };
       }
@@ -130,10 +134,13 @@
     get(col, id) { return this.all(col).find((x) => x.id === id) || null; },
     where(col, fn) { return this.all(col).filter(fn); },
     settings: () => settings,
-    classes() { return [...new Set(data.students.map((s) => s.className))].sort(); },
-    targets(item, className) { return item.className === '전체' || item.className === className; },
+    // 반 목록은 학생들의 반에서 만들어짐 → 학생이 한 명도 없는 반은 자동으로 사라짐
+    classes() { return [...new Set(data.students.flatMap((s) => s.classNames))].sort((a, b) => a.localeCompare(b)); },
+    // classNames: 반 이름 하나 또는 여러 개(배열)
+    targets(item, classNames) { return item.className === '전체' || [].concat(classNames || []).includes(item.className); },
+    classLabel(s) { return (s?.classNames || []).join(', '); },
     studentsFor(className) {
-      return (className === '전체' ? data.students.slice() : data.students.filter((s) => s.className === className))
+      return (className === '전체' ? data.students.slice() : data.students.filter((s) => s.classNames.includes(className)))
         .sort((a, b) => a.name.localeCompare(b.name));
     },
     submissionOf(assignmentId, studentId) {
@@ -168,7 +175,7 @@
     },
 
     /* ---------- 학생 계정 (관리자) ---------- */
-    async createStudent({ loginId, password, name, school, className, parentPhone = '' }) {
+    async createStudent({ loginId, password, name, school, classNames, parentPhone = '' }) {
       // 관리자 로그인 상태를 유지하기 위해 임시 클라이언트로 가입 처리
       const temp = global.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
         auth: { persistSession: false, autoRefreshToken: false, storageKey: 'lms-signup-temp' },
@@ -177,7 +184,7 @@
       check(res);
       const newId = res.data.user?.id;
       if (!newId || (res.data.user.identities && res.data.user.identities.length === 0)) throw new Error('User already registered');
-      check(await sb.from('students').insert({ id: newId, login_id: loginId.trim().toLowerCase(), name, school, class_name: className, parent_phone: parentPhone }));
+      check(await sb.from('students').insert({ id: newId, login_id: loginId.trim().toLowerCase(), name, school, class_name: classNames[0], class_names: classNames, parent_phone: parentPhone }));
       await this.load();
     },
     /* ---------- 학부모 계정 (관리자) ---------- */
@@ -289,6 +296,7 @@
     [/Email not confirmed/i, 'Supabase에서 이메일 확인(Confirm email)을 꺼주세요.'],
     [/Failed to fetch|NetworkError/i, '인터넷 연결을 확인해주세요.'],
     [/row-level security|permission denied/i, '권한이 없어요.'],
+    [/class_names|my_classes/i, '여러 반 기능용 DB 설정(supabase/multi-class-schema.sql)을 먼저 실행해주세요.'],
     [/relation .*parent|parent_students|admin_set_parent_password|admin_delete_parent|report_logs_channel_check|Could not find the table/i, '학부모 기능용 DB 설정(supabase/parent-schema.sql)을 먼저 실행해주세요.'],
     [/Payload too large|exceeded the maximum/i, '파일이 너무 커요. (최대 50MB)'],
   ];

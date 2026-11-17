@@ -12,6 +12,25 @@
   const classOptions = (selected = '', withAll = true) =>
     (withAll ? ['전체', ...Store.classes()] : Store.classes())
       .map((c) => `<option ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  const classBadges = (s) => s.classNames.map((c) => `<span class="badge">${esc(c)}</span>`).join(' ');
+  // 학생 반 고르기: 기존 반은 체크, 새 반은 입력 (쉼표로 여러 개)
+  const classPicker = (selected = []) => {
+    const all = Store.classes();
+    return `
+      <div class="field span-4"><span>반 (여러 개 고를 수 있어요)</span>
+        ${all.length ? `<div class="row wrap" style="gap:6px 16px;margin-bottom:6px">${all.map((c) => `
+          <label class="check"><input type="checkbox" name="cls" value="${esc(c)}" ${selected.includes(c) ? 'checked' : ''}> ${esc(c)}</label>`).join('')}</div>` : ''}
+        <input type="text" name="newClasses" placeholder="${all.length ? '새 반 추가 (선택) · 예) 고2 B반, 고2 심화반' : '예) 고1 A반 (여러 반이면 쉼표로 구분)'}">
+      </div>`;
+  };
+  const readClasses = (f) => {
+    const list = [...f.querySelectorAll('[name=cls]:checked')].map((x) => x.value)
+      .concat(f.newClasses.value.split(',').map((x) => x.trim()).filter(Boolean));
+    const out = [...new Set(list)];
+    if (!out.length) throw new Error('반을 하나 이상 골라 주세요.');
+    if (out.includes('전체')) throw new Error("'전체'는 반 이름으로 쓸 수 없어요.");
+    return out;
+  };
   const noClassHint = () => (Store.classes().length ? '' : '<p class="muted small">먼저 <a href="#students" style="color:var(--primary)">학생 관리</a>에서 학생을 등록하면 반 목록이 생겨요.</p>');
 
   // 폼 제출 공통: 버튼 잠금 + 오류 토스트 + 완료 후 다시 그리기
@@ -279,7 +298,11 @@
     /* ---------- 성적 관리 ---------- */
     scores(id) {
       if (id) return scoreEntry(id);
-      const list = Store.all('tests').slice().sort((a, b) => b.date.localeCompare(a.date));
+      const classes = Store.classes();
+      if (scoreClass !== 'all' && !classes.includes(scoreClass)) scoreClass = 'all';
+      const allTests = Store.all('tests').slice().sort((a, b) => b.date.localeCompare(a.date));
+      const list = scoreClass === 'all' ? allTests : allTests.filter((t) => t.className === scoreClass);
+      const chip = (k, label) => `<button class="chip ${scoreClass === k ? 'active' : ''}" data-sclass="${esc(k)}">${esc(label)}</button>`;
       $view.innerHTML = `
         <details class="card form-card" ${list.length ? '' : 'open'}>
           <summary>＋ 새 테스트 만들기</summary>
@@ -294,6 +317,7 @@
             <div class="form-actions"><button class="btn btn-primary">만들고 성적 입력하기</button></div>
           </form>
         </details>
+        ${classes.length > 1 ? `<div class="filter-bar">${chip('all', '모든 반')}${classes.map((c) => chip(c, c)).join('')}</div>` : ''}
         <div class="table-wrap"><table>
           <thead><tr><th>테스트</th><th>반</th><th>시험일</th><th>입력</th><th>평균</th><th>최고 / 최저</th><th></th></tr></thead>
           <tbody>${list.map((t) => {
@@ -311,7 +335,9 @@
           }).join('') || '<tr><td colspan="7" class="empty">테스트가 없습니다</td></tr>'}</tbody>
         </table></div>`;
 
+      $view.querySelectorAll('[data-sclass]').forEach((b) => b.onclick = () => { scoreClass = b.dataset.sclass; render(); });
       const form = document.getElementById('testForm');
+      if (scoreClass !== 'all') form.className.value = scoreClass;
       form.onsubmit = (e) => {
         e.preventDefault();
         UI.busy(e.submitter, async () => {
@@ -329,7 +355,7 @@
     /* ---------- 학생 관리 ---------- */
     students(id) {
       if (id) return studentEdit(id);
-      const list = Store.all('students').slice().sort((a, b) => a.className.localeCompare(b.className) || a.name.localeCompare(b.name));
+      const list = Store.all('students').slice().sort((a, b) => Store.classLabel(a).localeCompare(Store.classLabel(b)) || a.name.localeCompare(b.name));
       $view.innerHTML = `
         <details class="card form-card" ${list.length ? '' : 'open'}>
           <summary>＋ 학생 계정 만들기</summary>
@@ -337,8 +363,8 @@
             <div class="form-grid">
               <label class="field"><span>이름</span><input type="text" name="name" required></label>
               <label class="field"><span>학교</span><input type="text" name="school" placeholder="예) 부일고"></label>
-              <label class="field"><span>반</span><input type="text" name="className" list="classList" required placeholder="예) 고1 A반"><datalist id="classList">${Store.classes().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
-              <label class="field"><span>학부모 연락처</span><input type="tel" name="parentPhone" placeholder="010-1234-5678" inputmode="tel"></label>
+              <label class="field span-2"><span>학부모 연락처</span><input type="tel" name="parentPhone" placeholder="010-1234-5678" inputmode="tel"></label>
+              ${classPicker()}
               <label class="field"><span>로그인 아이디 (영문·숫자)</span><input type="text" name="loginId" required pattern="[A-Za-z0-9._\\-]{3,30}" title="영문, 숫자 3~30자" autocapitalize="off" placeholder="예) minjun08"></label>
               <label class="field"><span>초기 비밀번호 (6자 이상)</span><input type="text" name="password" required minlength="6" autocomplete="off"></label>
             </div>
@@ -348,18 +374,21 @@
         <div class="table-wrap"><table>
           <thead><tr><th>이름</th><th>아이디</th><th>학교</th><th>반</th><th>학부모 연락처</th><th>숙제 제출</th><th>최근 점수</th><th></th></tr></thead>
           <tbody>${list.map((s) => {
-            const hw = Store.where('assignments', (a) => Store.targets(a, s.className));
+            const hw = Store.where('assignments', (a) => Store.targets(a, s.classNames));
             const done = hw.filter((a) => Store.submissionOf(a.id, s.id)).length;
-            const tests = Store.where('tests', (t) => Store.targets(t, s.className)).sort((a, b) => b.date.localeCompare(a.date));
-            const last = tests.map((t) => ({ t, sc: Store.scoreOf(t.id, s.id) })).find((x) => hasScore(x.sc));
+            // 최근 점수는 반별로 따로
+            const lastOf = (c) => Store.where('tests', (t) => t.className === c).sort((a, b) => b.date.localeCompare(a.date))
+              .map((t) => ({ t, sc: Store.scoreOf(t.id, s.id) })).find((x) => hasScore(x.sc));
+            const lasts = s.classNames.map((c) => ({ c, x: lastOf(c) })).filter((r) => r.x);
+            const multi = s.classNames.length > 1;
             return `<tr>
               <td><b>${esc(s.name)}</b></td>
               <td class="muted">${esc(s.loginId)}</td>
               <td>${esc(s.school)}</td>
-              <td><span class="badge">${esc(s.className)}</span></td>
+              <td>${classBadges(s)}</td>
               <td>${s.parentPhone ? esc(UI.fmtPhone(s.parentPhone)) : '<span class="badge badge-warn">미등록</span>'}${Store.parentsOf(s.id).length ? ' <span class="badge badge-primary" title="학부모 앱 계정 있음">📱 앱</span>' : ''}</td>
               <td>${done} / ${hw.length}</td>
-              <td>${last ? `<b>${last.sc.score}</b> <span class="muted small">${esc(last.t.title)}</span>` : '<span class="muted">-</span>'}</td>
+              <td>${lasts.length ? lasts.map(({ c, x }) => `<div>${multi ? `<span class="muted small">${esc(c)}</span> ` : ''}<b>${x.sc.score}</b> <span class="muted small">${esc(x.t.title)}</span></div>`).join('') : '<span class="muted">-</span>'}</td>
               <td class="actions"><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
             </tr>`;
           }).join('') || '<tr><td colspan="8" class="empty">등록된 학생이 없습니다</td></tr>'}</tbody>
@@ -367,7 +396,7 @@
 
       onSubmit(document.getElementById('stuForm'), async (f) => {
         await Store.createStudent({
-          name: f.name.value.trim(), school: f.school.value.trim(), className: f.className.value.trim(),
+          name: f.name.value.trim(), school: f.school.value.trim(), classNames: readClasses(f),
           loginId: f.loginId.value.trim(), password: f.password.value, parentPhone: UI.phoneDigits(f.parentPhone.value),
         });
         UI.toast(`${f.name.value.trim()} 학생 계정을 만들었습니다.`);
@@ -423,7 +452,7 @@
             return `
             <div class="card sub-card" data-card="${s.id}">
               <div class="row between">
-                <span class="who">${esc(s.name)} <span class="muted small" style="font-weight:500">${esc(s.className)}</span></span>
+                <span class="who">${esc(s.name)} <span class="muted small" style="font-weight:500">${esc(Store.classLabel(s))}</span></span>
                 ${s.parentPhone ? `<span class="small">📞 ${esc(UI.fmtPhone(s.parentPhone))}</span>` : `<a class="btn btn-sm" href="#students/${s.id}">연락처 등록</a>`}
               </div>
               <textarea class="report-text" data-text="${s.id}">${esc(text)}</textarea>
@@ -515,7 +544,7 @@
               <option value="all">모든 질문자</option>
               <option value="members" ${f.student === 'members' ? 'selected' : ''}>학습앱 학생만</option>
               <option value="anon" ${f.student === 'anon' ? 'selected' : ''}>비로그인만</option>
-              ${students.map((s) => `<option value="${s.id}" ${f.student === s.id ? 'selected' : ''}>${esc(s.name)} (${esc(s.className)})</option>`).join('')}
+              ${students.map((s) => `<option value="${s.id}" ${f.student === s.id ? 'selected' : ''}>${esc(s.name)} (${esc(Store.classLabel(s))})</option>`).join('')}
             </select>
             <button class="btn btn-sm" id="askReload">↻ 새로고침</button>
           </div>
@@ -680,7 +709,7 @@
     const inRange = (d) => d >= rep.from && d <= rep.to;
 
     if (rep.hw) {
-      const hw = Store.where('assignments', (a) => Store.targets(a, s.className) && inRange(a.dueDate))
+      const hw = Store.where('assignments', (a) => Store.targets(a, s.classNames) && inRange(a.dueDate))
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
       const done = hw.filter((a) => Store.submissionOf(a.id, s.id)).length;
       L.push('', `■ 숙제 (${hw.length}개 중 ${done}개 제출)`);
@@ -696,16 +725,20 @@
     }
 
     if (rep.scores) {
-      const tests = Store.where('tests', (t) => Store.targets(t, s.className) && inRange(t.date))
-        .sort((a, b) => a.date.localeCompare(b.date));
-      L.push('', '■ 테스트 성적');
-      if (!tests.length) L.push('- 해당 기간 테스트가 없습니다.');
-      for (const t of tests) {
-        const sc = Store.scoreOf(t.id, s.id);
-        const st = Store.testStats(t.id);
-        if (!hasScore(sc)) { L.push(`- ${t.title} (${md(t.date)}): 점수 없음`); continue; }
-        L.push(`- ${t.title} (${md(t.date)}): ${sc.score}점 / ${t.maxScore}점${st.avg !== null ? ` (반 평균 ${st.avg}점)` : ''}`);
-        if (rep.fb && sc.feedback) L.push(`  └ ${oneLine(sc.feedback)}`);
+      // 여러 반을 듣는 학생은 반별로 나눠서 적음
+      const multi = s.classNames.length > 1;
+      for (const c of s.classNames) {
+        const tests = Store.where('tests', (t) => t.className === c && inRange(t.date))
+          .sort((a, b) => a.date.localeCompare(b.date));
+        L.push('', multi ? `■ 테스트 성적 · ${c}` : '■ 테스트 성적');
+        if (!tests.length) L.push('- 해당 기간 테스트가 없습니다.');
+        for (const t of tests) {
+          const sc = Store.scoreOf(t.id, s.id);
+          const st = Store.testStats(t.id);
+          if (!hasScore(sc)) { L.push(`- ${t.title} (${md(t.date)}): 점수 없음`); continue; }
+          L.push(`- ${t.title} (${md(t.date)}): ${sc.score}점 / ${t.maxScore}점${st.avg !== null ? ` (반 평균 ${st.avg}점)` : ''}`);
+          if (rep.fb && sc.feedback) L.push(`  └ ${oneLine(sc.feedback)}`);
+        }
       }
     }
 
@@ -723,16 +756,18 @@
         <div class="form-grid">
           <label class="field"><span>이름</span><input type="text" name="name" required value="${esc(s.name)}"></label>
           <label class="field"><span>학교</span><input type="text" name="school" value="${esc(s.school)}"></label>
-          <label class="field"><span>반</span><input type="text" name="className" list="classList" required value="${esc(s.className)}"><datalist id="classList">${Store.classes().map((c) => `<option value="${esc(c)}">`).join('')}</datalist></label>
           <label class="field"><span>로그인 아이디</span><input type="text" value="${esc(s.loginId)}" disabled></label>
-          <label class="field span-2"><span>학부모 연락처</span><input type="tel" name="parentPhone" inputmode="tel" placeholder="010-1234-5678" value="${esc(UI.fmtPhone(s.parentPhone))}"></label>
+          <label class="field"><span>학부모 연락처</span><input type="tel" name="parentPhone" inputmode="tel" placeholder="010-1234-5678" value="${esc(UI.fmtPhone(s.parentPhone))}"></label>
+          ${classPicker(s.classNames)}
         </div>
+        <p class="muted small">반에서 빼도 그 반에서 받은 점수는 지워지지 않아요. 다시 넣으면 그대로 보여요. 학생이 한 명도 없는 반은 반 목록에서 사라져요.</p>
         <div class="form-actions"><a class="btn" href="#students">취소</a><button class="btn btn-primary">저장</button></div>
       </form>
       ${parentSection(s)}`;
     onSubmit(document.getElementById('stuEdit'), async (f) => {
+      const classNames = readClasses(f);
       await Store.update('students', s.id, {
-        name: f.name.value.trim(), school: f.school.value.trim(), className: f.className.value.trim(),
+        name: f.name.value.trim(), school: f.school.value.trim(), className: classNames[0], classNames,
         parentPhone: UI.phoneDigits(f.parentPhone.value),
       });
       UI.toast('저장했습니다.');
@@ -943,6 +978,7 @@
   }
 
   /* ---------- 성적 + 피드백 입력 ---------- */
+  let scoreClass = 'all'; // 성적 관리 목록의 반 필터
   function scoreEntry(id) {
     const t = Store.get('tests', id);
     if (!t) { location.hash = '#scores'; return; }

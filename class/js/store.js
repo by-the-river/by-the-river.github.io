@@ -228,6 +228,20 @@
       if (res.error) console.warn(res.error);
     },
 
+    // 반 이름 바꾸기: 학생들의 반 + 그 반 대상 숙제·자료·공지·테스트까지 함께 변경
+    // (새 이름이 이미 있는 반이면 두 반이 하나로 합쳐짐)
+    async renameClass(oldName, newName) {
+      const now = this.nowISO();
+      for (const s of data.students.filter((x) => x.classNames.includes(oldName))) {
+        const names = [...new Set(s.classNames.map((c) => (c === oldName ? newName : c)))];
+        check(await sb.from('students').update({ class_names: names, class_name: names[0], updated_at: now }).eq('id', s.id));
+      }
+      for (const t of ['assignments', 'materials', 'notices', 'tests']) {
+        check(await sb.from(t).update({ class_name: newName, updated_at: now }).eq('class_name', oldName));
+      }
+      await this.load();
+    },
+
     async setStudentPassword(id, password) {
       check(await sb.rpc('admin_set_student_password', { p_student: id, p_password: password }));
     },

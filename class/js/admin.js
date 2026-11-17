@@ -371,6 +371,21 @@
             <div class="form-actions"><button class="btn btn-primary">계정 만들기</button></div>
           </form>
         </details>
+        ${Store.classes().length ? `
+        <details class="card form-card">
+          <summary>🏷️ 반 관리 (이름 바꾸기)</summary>
+          <div class="table-wrap" style="margin-top:10px"><table>
+            <thead><tr><th>반</th><th>학생</th><th>숙제</th><th>테스트</th><th></th></tr></thead>
+            <tbody>${Store.classes().map((c) => `<tr>
+              <td><span class="badge">${esc(c)}</span></td>
+              <td>${Store.studentsFor(c).length}명</td>
+              <td>${Store.where('assignments', (a) => a.className === c).length}개</td>
+              <td>${Store.where('tests', (t) => t.className === c).length}개</td>
+              <td class="actions"><button class="btn btn-sm" data-rename="${esc(c)}">이름 바꾸기</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+          <p class="muted small">이름을 바꾸면 학생들의 반과 그 반의 숙제·자료·공지·테스트도 함께 새 이름으로 바뀌어요. 이미 있는 반 이름을 적으면 두 반이 하나로 합쳐져요.</p>
+        </details>` : ''}
         <div class="table-wrap"><table>
           <thead><tr><th>이름</th><th>아이디</th><th>학교</th><th>반</th><th>학부모 연락처</th><th>숙제 제출</th><th>최근 점수</th><th></th></tr></thead>
           <tbody>${list.map((s) => {
@@ -401,6 +416,18 @@
         });
         UI.toast(`${f.name.value.trim()} 학생 계정을 만들었습니다.`);
       }, '만드는 중...');
+      onClick('[data-rename]', async (b) => {
+        const oldName = b.dataset.rename;
+        const input = prompt(`'${oldName}' 반의 새 이름`, oldName);
+        if (input === null) return false;
+        const newName = input.trim();
+        if (!newName || newName === oldName) return false;
+        if (newName === '전체') { UI.toast("'전체'는 반 이름으로 쓸 수 없어요.", 'error'); return false; }
+        if (Store.classes().includes(newName)
+          && !confirm(`'${newName}' 반이 이미 있어요. 두 반을 하나로 합칠까요?\n('${oldName}'의 학생·숙제·테스트가 모두 '${newName}'(으)로 옮겨져요)`)) return false;
+        await Store.renameClass(oldName, newName);
+        UI.toast(`'${oldName}' → '${newName}' 으로 바꿨어요.`);
+      });
       onClick('[data-pw]', async (b) => {
         const pw = prompt(`${studentName(b.dataset.pw)} 학생의 새 비밀번호 (6자 이상)`);
         if (pw === null) return false;

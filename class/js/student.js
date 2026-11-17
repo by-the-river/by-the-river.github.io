@@ -445,29 +445,7 @@
   }
 
   /* ---------- 점수 추이 차트 (SVG) ---------- */
-  function chartSVG(rows) {
-    const W = 440, H = 190, L = 30, R = 14, T = 16, B = 30;
-    const pct = (v, max) => (v / max) * 100;
-    const x = (i) => L + (rows.length === 1 ? (W - L - R) / 2 : (i * (W - L - R)) / (rows.length - 1));
-    const y = (p) => T + (1 - p / 100) * (H - T - B);
-    const mine = rows.map((r, i) => [x(i), y(pct(r.s.score, r.t.maxScore))]);
-    const avg = rows.map((r, i) => (r.st.avg === null ? null : [x(i), y(pct(r.st.avg, r.t.maxScore))])).filter(Boolean);
-    const path = (pts) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-    const grid = [0, 50, 100].map((g) => `
-      <line x1="${L}" x2="${W - R}" y1="${y(g)}" y2="${y(g)}" stroke="#e4e7ee"/>
-      <text x="${L - 6}" y="${y(g) + 4}" font-size="11" fill="#6b7385" text-anchor="end">${g}</text>`).join('');
-    return `
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="점수 추이 그래프">
-        ${grid}
-        <path d="${path(avg)}" fill="none" stroke="#b8bdc9" stroke-width="2" stroke-dasharray="4 4"/>
-        <path d="${path(mine)}" fill="none" stroke="#4353e8" stroke-width="2.5" stroke-linejoin="round"/>
-        ${mine.map((p, i) => `
-          <circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#fff" stroke="#4353e8" stroke-width="2.5"/>
-          <text x="${p[0]}" y="${p[1] - 10}" font-size="12" font-weight="700" fill="#4353e8" text-anchor="middle">${rows[i].s.score}</text>
-          <text x="${p[0]}" y="${H - 8}" font-size="11" fill="#6b7385" text-anchor="middle">${UI.fmtDate(rows[i].t.date).split(' ')[0]}</text>`).join('')}
-      </svg>`;
-  }
-
+  const chartSVG = (rows) => UI.scoreChart(rows);
   /* ============================================================
    * 질문하기
    *  - 질문노트(akymath.kr/ask)와 같은 서버 함수(ask)를 학생 로그인으로 호출 (횟수 제한 없음)

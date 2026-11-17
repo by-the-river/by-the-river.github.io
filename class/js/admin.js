@@ -404,7 +404,7 @@
               <td>${s.parentPhone ? esc(UI.fmtPhone(s.parentPhone)) : '<span class="badge badge-warn">미등록</span>'}${Store.parentsOf(s.id).length ? ' <span class="badge badge-primary" title="학부모 앱 계정 있음">📱 앱</span>' : ''}</td>
               <td>${done} / ${hw.length}</td>
               <td>${lasts.length ? lasts.map(({ c, x }) => `<div>${multi ? `<span class="muted small">${esc(c)}</span> ` : ''}<b>${x.sc.score}</b> <span class="muted small">${esc(x.t.title)}</span></div>`).join('') : '<span class="muted">-</span>'}</td>
-              <td class="actions"><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
+              <td class="actions"><a class="btn btn-sm" href="#students/${s.id}/scores">📊 성적</a><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
             </tr>`;
           }).join('') || '<tr><td colspan="8" class="empty">등록된 학생이 없습니다</td></tr>'}</tbody>
         </table></div>`;
@@ -773,6 +773,46 @@
     return L.join('\n');
   }
 
+  /* ---------- 학생 수정 화면: 반별 성적 추이 ---------- */
+  function scoreSection(s) {
+    // 지금 듣는 반 + 예전에 들었던 반(점수가 남아 있는 반)
+    const scoredClasses = Store.where('scores', (x) => x.studentId === s.id && hasScore(x))
+      .map((x) => Store.get('tests', x.testId)?.className).filter(Boolean);
+    const classes = [...new Set([...s.classNames, ...scoredClasses])];
+    const blocks = classes.map((c) => {
+      const rows = Store.where('tests', (t) => t.className === c).sort((a, b) => a.date.localeCompare(b.date))
+        .map((t) => ({ t, s: Store.scoreOf(t.id, s.id), st: Store.testStats(t.id) }));
+      if (!rows.length) return '';
+      const graded = rows.filter((r) => hasScore(r.s));
+      const pcts = graded.map((r) => (r.s.score / r.t.maxScore) * 100);
+      const avgPct = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
+      return `
+        <div class="stack" style="gap:8px">
+          <div class="row between wrap">
+            <b>${esc(c)}${s.classNames.includes(c) ? '' : ' <span class="badge">지금은 안 듣는 반</span>'}</b>
+            <span class="muted small">응시 ${graded.length} / ${rows.length}회${avgPct !== null ? ` · 평균 ${avgPct}점 (100점 환산)` : ''}</span>
+          </div>
+          ${graded.length ? `<div class="chart">${UI.scoreChart(graded)}</div>
+          <div class="legend"><span><i style="background:#4353e8"></i>${esc(s.name)} 점수</span><span><i style="background:#b8bdc9"></i>반 평균</span></div>` : ''}
+          <div class="table-wrap"><table>
+            <thead><tr><th>시험일</th><th>테스트</th><th>점수</th><th>반 평균</th><th>피드백</th></tr></thead>
+            <tbody>${rows.slice().reverse().map(({ t, s: sc, st }) => `<tr>
+              <td class="muted">${UI.fmtDate(t.date)}</td>
+              <td><a class="title-link" href="#scores/${t.id}">${esc(t.title)}</a></td>
+              <td>${hasScore(sc) ? `<b>${sc.score}</b> <span class="muted small">/ ${t.maxScore}</span>` : '<span class="muted">-</span>'}</td>
+              <td class="muted">${st.avg ?? '-'}</td>
+              <td class="small ellipsis" style="max-width:280px">${esc(sc?.feedback || '')}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>
+        </div>`;
+    }).filter(Boolean);
+    return `
+      <section class="card stack" style="max-width:720px" id="scoreBox">
+        <div class="card-title">📊 성적 추이 <span class="muted small" style="font-weight:500">반별로 따로 보여요 · 테스트 이름을 누르면 성적 입력 화면으로 가요</span></div>
+        ${blocks.join('<hr style="border:0;border-top:1px solid var(--line);margin:6px 0">') || '<p class="muted small">아직 테스트 기록이 없어요.</p>'}
+      </section>`;
+  }
+
   /* ---------- 학생 정보 수정 ---------- */
   function studentEdit(id) {
     const s = Store.get('students', id);
@@ -790,7 +830,9 @@
         <p class="muted small">반에서 빼도 그 반에서 받은 점수는 지워지지 않아요. 다시 넣으면 그대로 보여요. 학생이 한 명도 없는 반은 반 목록에서 사라져요.</p>
         <div class="form-actions"><a class="btn" href="#students">취소</a><button class="btn btn-primary">저장</button></div>
       </form>
+      ${scoreSection(s)}
       ${parentSection(s)}`;
+    if (/\/scores$/.test(location.hash)) setTimeout(() => document.getElementById('scoreBox')?.scrollIntoView({ block: 'start' }), 0);
     onSubmit(document.getElementById('stuEdit'), async (f) => {
       const classNames = readClasses(f);
       await Store.update('students', s.id, {

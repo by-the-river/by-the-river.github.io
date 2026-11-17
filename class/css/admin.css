@@ -126,3 +126,8 @@ td .title-link:hover { color: var(--primary); }
 
 /* ---------- 학부모 리포트 ---------- */
 .report-text { min-height: 260px !important; font-size: 13px !important; line-height: 1.65; background: var(--surface-2); }
+
+/* 학생 성적 추이 그래프 */
+.chart svg { width: 100%; height: auto; display: block; max-height: 260px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }

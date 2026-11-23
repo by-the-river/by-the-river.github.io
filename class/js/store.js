@@ -577,17 +577,24 @@
     askMarks(answer) {
       const m = String(answer || '').match(/```marks\s*\n([\s\S]*?)```/);
       if (!m) return [];
-      let list;
-      try { list = JSON.parse(m[1]).marks; } catch (e) { return []; }
+      let obj;
+      try { obj = JSON.parse(m[1]); } catch (e) { return []; }
+      const list = obj && obj.marks;
       if (!Array.isArray(list)) return [];
+      // sizes: 사진별 [가로, 세로] 픽셀 → 좌표를 0~1000 으로 바꿈 (sizes 가 없으면 예전 방식: 이미 0~1000)
+      const sizes = Array.isArray(obj.sizes) ? obj.sizes : [];
       const c = (v) => Math.max(0, Math.min(1000, Number(v) || 0));
       return list.filter((x) => x && Array.isArray(x.box) && x.box.length === 4 && x.box.every((v) => Number.isFinite(Number(v))))
         .map((x) => {
-          let [x1, y1, x2, y2] = x.box.map(c);
+          const img = Math.max(1, Math.round(Number(x.img) || 1));
+          const sz = sizes[img - 1];
+          const sw = Array.isArray(sz) && Number(sz[0]) > 0 ? Number(sz[0]) : 1000;
+          const sh = Array.isArray(sz) && Number(sz[1]) > 0 ? Number(sz[1]) : 1000;
+          let [x1, y1, x2, y2] = x.box.map((v, i) => c(Number(v) * 1000 / (i % 2 ? sh : sw)));
           if (x2 < x1) [x1, x2] = [x2, x1];
           if (y2 < y1) [y1, y2] = [y2, y1];
           return {
-            img: Math.max(1, Math.round(Number(x.img) || 1)), box: [x1, y1, x2, y2],
+            img, box: [x1, y1, x2, y2],
             type: ['strike', 'circle', 'underline'].includes(x.type) ? x.type : 'circle',
             note: String(x.note || '').replace(/[$\\`]/g, '').slice(0, 40),
           };

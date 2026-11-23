@@ -52,9 +52,16 @@
     ctx.drawImage(img, 0, 0, c.width, c.height);
     return c.toDataURL('image/jpeg', quality);
   }
-  async function prepare(file) {
+  async function prepare(file, kind) {
     if (!/^image\//.test(file.type) && !/\.(heic|heif)$/i.test(file.name)) throw new Error('사진 파일만 올릴 수 있어요.');
     const img = await loadImage(file);
+    if (kind === 'work') {
+      // 풀이 사진은 AI가 줄이지 않는 크기(긴 변 1568px, 약 115만 화소 이하)로 보내고 크기를 함께 알려 줌 → 빨간 펜 위치가 정확해짐
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const s = Math.min(1, 1568 / Math.max(W, H), Math.sqrt(1150000 / (W * H)));
+      const full = toJpeg(img, Math.round(Math.max(W, H) * s), 0.88);
+      return { type: 'image/jpeg', data: full.split(',')[1], preview: full, thumb: toJpeg(img, 320, 0.6), w: Math.round(W * s), h: Math.round(H * s) };
+    }
     const full = toJpeg(img, 1600, 0.86);
     return { type: 'image/jpeg', data: full.split(',')[1], preview: full, thumb: toJpeg(img, 320, 0.6) };
   }
@@ -104,7 +111,7 @@
       } else {
         const room = MAX_WORK - state.work.length;
         if (files.length > room) msg(`풀이 사진은 ${MAX_WORK}장까지 올릴 수 있어요.`);
-        for (const f of [...files].slice(0, room)) state.work.push(await prepare(f));
+        for (const f of [...files].slice(0, room)) state.work.push(await prepare(f, 'work'));
       }
     } catch (e) { msg(e.message); }
     renderPreviews();
@@ -238,17 +245,24 @@
   function askMarks(answer) {
       const m = String(answer || '').match(/```marks\s*\n([\s\S]*?)```/);
       if (!m) return [];
-      let list;
-      try { list = JSON.parse(m[1]).marks; } catch (e) { return []; }
+      let obj;
+      try { obj = JSON.parse(m[1]); } catch (e) { return []; }
+      const list = obj && obj.marks;
       if (!Array.isArray(list)) return [];
+      // sizes: 사진별 [가로, 세로] 픽셀 → 좌표를 0~1000 으로 바꿈 (sizes 가 없으면 예전 방식: 이미 0~1000)
+      const sizes = Array.isArray(obj.sizes) ? obj.sizes : [];
       const c = (v) => Math.max(0, Math.min(1000, Number(v) || 0));
       return list.filter((x) => x && Array.isArray(x.box) && x.box.length === 4 && x.box.every((v) => Number.isFinite(Number(v))))
         .map((x) => {
-          let [x1, y1, x2, y2] = x.box.map(c);
+          const img = Math.max(1, Math.round(Number(x.img) || 1));
+          const sz = sizes[img - 1];
+          const sw = Array.isArray(sz) && Number(sz[0]) > 0 ? Number(sz[0]) : 1000;
+          const sh = Array.isArray(sz) && Number(sz[1]) > 0 ? Number(sz[1]) : 1000;
+          let [x1, y1, x2, y2] = x.box.map((v, i) => c(Number(v) * 1000 / (i % 2 ? sh : sw)));
           if (x2 < x1) [x1, x2] = [x2, x1];
           if (y2 < y1) [y1, y2] = [y2, y1];
           return {
-            img: Math.max(1, Math.round(Number(x.img) || 1)), box: [x1, y1, x2, y2],
+            img, box: [x1, y1, x2, y2],
             type: ['strike', 'circle', 'underline'].includes(x.type) ? x.type : 'circle',
             note: String(x.note || '').replace(/[$\\`]/g, '').slice(0, 40),
           };
@@ -456,7 +470,7 @@
       const res = await callFn({
         action: 'ask', mode, note, style: mode === 'solve' ? 'steps' : undefined, marks: mode === 'check',
         problem: { type: state.problem.type, data: state.problem.data },
-        work: mode === 'check' ? state.work.map((w) => ({ type: w.type, data: w.data })) : [],
+        work: mode === 'check' ? state.work.map((w) => ({ type: w.type, data: w.data, w: w.w, h: w.h })) : [],
       });
       if (!res.ok || !res.body) {
         let body = {};

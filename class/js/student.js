@@ -487,8 +487,11 @@
         if (files.length > room) UI.toast('풀이 사진은 3장까지 올릴 수 있어요.', 'error');
         for (const file of files.slice(0, room)) {
           const img = await loadImage(file);
-          const full = toJpeg(img, 1600, 0.86);
-          f.work.push({ data: full.split(',')[1], preview: full, thumb: toJpeg(img, 240, 0.6) });
+          // 풀이 사진은 AI가 줄이지 않는 크기(긴 변 1568px, 약 115만 화소 이하)로 보내고 크기를 함께 알려 줌 → 빨간 펜 위치가 정확해짐
+          const W = img.naturalWidth, H = img.naturalHeight;
+          const s = Math.min(1, 1568 / Math.max(W, H), Math.sqrt(1150000 / (W * H)));
+          const full = toJpeg(img, Math.round(Math.max(W, H) * s), 0.88);
+          f.work.push({ data: full.split(',')[1], preview: full, thumb: toJpeg(img, 240, 0.6), w: Math.round(W * s), h: Math.round(H * s) });
         }
       }
     } catch (e) { UI.toast(e.message, 'error'); }
@@ -505,7 +508,7 @@
     const body = {
       action: 'ask', mode, style: 'steps', marks: mode === 'check', note: req.note, deviceId: 'app-' + me.id,
       problem: { type: 'image/jpeg', data: f.problem.data },
-      work: mode === 'check' ? f.work.map((w) => ({ type: 'image/jpeg', data: w.data })) : [],
+      work: mode === 'check' ? f.work.map((w) => ({ type: 'image/jpeg', data: w.data, w: w.w, h: w.h })) : [],
     };
     ask.pending = req;
     render();

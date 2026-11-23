@@ -219,7 +219,8 @@
       catch (e) { return esc(m.tex); }
     });
   }
-  const stripVerdict = (s) => s.replace(/^\s*판정:[^\n]*\n?/, '');
+  // 첫 줄 '판정: ...' 과 끝의 ```marks 블록(사진 위 첨삭 표시 정보)을 뺀 본문 (받는 중에 덜 온 블록도 숨김)
+  const stripVerdict = (s) => String(s || '').replace(/^\s*판정:[^\n]*\n?/, '').replace(/\n*```marks\s*\n[\s\S]*?(?:```|$)\s*/g, '\n').trimEnd();
   // 기록 목록용 한 줄 미리보기: 수식 코드를 읽기 쉬운 글자로
   const TEX = { le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', theta: 'θ', infty: '∞', cdot: '·', times: '×', pm: '±', to: '→', sqrt: '√', lim: ' lim', sin: ' sin', cos: ' cos', tan: ' tan', ln: ' ln', log: ' log' };
   const plainTex = (s) => (window.AskGraph ? AskGraph.strip(s) : String(s || ''))
@@ -230,6 +231,77 @@
   function parseVerdict(s) {
     const m = s.match(/^\s*판정:\s*(정답|오답|확인 어려움)/);
     return m ? { '정답': 'correct', '오답': 'wrong', '확인 어려움': 'unclear' }[m[1]] : null;
+  }
+
+  /* ---------- 첨삭 사진 위 빨간 펜 표시 (학습앱 js/store.js 의 UI.askMarks / UI.markFigure 와 같은 코드) ---------- */
+  // 답변 끝의 ```marks {"marks":[{img, box:[x1,y1,x2,y2](0~1000), type, note}]} ``` 읽기
+  function askMarks(answer) {
+      const m = String(answer || '').match(/```marks\s*\n([\s\S]*?)```/);
+      if (!m) return [];
+      let list;
+      try { list = JSON.parse(m[1]).marks; } catch (e) { return []; }
+      if (!Array.isArray(list)) return [];
+      const c = (v) => Math.max(0, Math.min(1000, Number(v) || 0));
+      return list.filter((x) => x && Array.isArray(x.box) && x.box.length === 4 && x.box.every((v) => Number.isFinite(Number(v))))
+        .map((x) => {
+          let [x1, y1, x2, y2] = x.box.map(c);
+          if (x2 < x1) [x1, x2] = [x2, x1];
+          if (y2 < y1) [y1, y2] = [y2, y1];
+          return {
+            img: Math.max(1, Math.round(Number(x.img) || 1)), box: [x1, y1, x2, y2],
+            type: ['strike', 'circle', 'underline'].includes(x.type) ? x.type : 'circle',
+            note: String(x.note || '').replace(/[$\\`]/g, '').slice(0, 40),
+          };
+        }).slice(0, 6);
+  }
+  // 사진 한 장 + 표시. imgAttrs: '<img ...>' 에 넣을 속성 (src=... 또는 data-file-id=...)
+  function markFigure(imgAttrs, marks) {
+      const svg = marks.map(({ box: [x1, y1, x2, y2], type }) => {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        if (type === 'strike') return `<path d="M${x1 - 6} ${cy + 5} Q${cx} ${cy - 7} ${x2 + 6} ${cy - 3}"/>`;
+        if (type === 'underline') {
+          const y = Math.min(995, y2 + 6), n = Math.max(2, Math.round((x2 - x1) / 40)), w = (x2 - x1) / n;
+          let d = `M${x1} ${y}`;
+          for (let i = 0; i < n; i++) d += ` q${w / 2} ${i % 2 ? 5 : -5} ${w} 0`;
+          return `<path d="${d}"/>`;
+        }
+        // 손으로 그린 듯 살짝 덜 닫힌 타원
+        const rx = (x2 - x1) / 2 + 14, ry = (y2 - y1) / 2 + 14;
+        const pt = (deg) => `${(cx + rx * Math.cos(deg * Math.PI / 180)).toFixed(1)} ${(cy + ry * Math.sin(deg * Math.PI / 180)).toFixed(1)}`;
+        // 위쪽에서 시작해 시계 방향으로 한 바퀴 돌고, 끝은 조금 바깥으로 벌어지며 시작점을 지나침
+        return `<path d="M${pt(-110)} A${rx} ${ry} 0 0 1 ${pt(50)} A${rx * 1.07} ${ry * 1.12} 0 1 1 ${pt(-75)}"/>`;
+      }).join('');
+      const notes = marks.filter((m) => m.note).map(({ box: [x1, y1, x2, y2], type, note }) => {
+        const gap = type === 'circle' ? 36 : 18; // 동그라미는 바깥으로 더 커서 메모를 조금 더 띄움
+        const pos = [];
+        if (x2 <= 620) pos.push(`left:${(x2 + gap) / 10}%`, `top:${y1 / 10}%`, `max-width:${(1000 - x2 - 30) / 10}%`);
+        else {
+          if (x1 <= 500) pos.push(`left:${x1 / 10}%`, `max-width:${(1000 - x1 - 10) / 10}%`);
+          else pos.push(`right:${(1000 - x2) / 10}%`, `max-width:${(x2 - 10) / 10}%`);
+          pos.push(y2 <= 880 ? `top:${(y2 + 14) / 10}%` : `bottom:${(1000 - y1 + 14) / 10}%`);
+        }
+        return `<span class="mark-note" style="${pos.join(';')}">${esc(note)}</span>`;
+      }).join('');
+      return `<figure class="mark-wrap"><img ${imgAttrs} alt="풀이 사진"><svg class="mark-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">${svg}</svg>${notes}</figure>`;
+  }
+
+  // 방금 올린 풀이 사진 위에 표시 (기록에는 작은 사진만 남아서, 첨삭을 받은 그 화면에서만 보여 줌)
+  function paintMarks(text, photos) {
+    const box = $('marksBox');
+    const marks = askMarks(text);
+    const figs = [...new Set(marks.map((m) => m.img))].sort((a, b) => a - b)
+      .map((n) => photos[n - 1] ? markFigure(`src="${photos[n - 1]}"`, marks.filter((m) => m.img === n)) : '').join('');
+    if (!figs) { box.hidden = true; box.innerHTML = ''; return; }
+    box.innerHTML = `
+      <div class="marks-head"><b>내 풀이에 빨간 펜으로 표시했어요</b><button type="button" class="text-btn" data-marks-toggle>표시 끄기</button></div>
+      ${figs}
+      <p class="marks-tip">AI가 표시한 위치라 조금 어긋날 수 있어요. 자세한 설명은 아래를 보세요.</p>`;
+    box.classList.remove('marks-off');
+    box.querySelector('[data-marks-toggle]').onclick = (e) => {
+      const off = box.classList.toggle('marks-off');
+      e.currentTarget.textContent = off ? '표시 켜기' : '표시 끄기';
+    };
+    box.hidden = false;
   }
 
   function paintAnswer(text, live) {
@@ -328,6 +400,8 @@
     $('resultTime').textContent = fmtTime(at);
     $('resultProblem').innerHTML = images.map((src, i) => `<img src="${src}" alt="${i ? '내 풀이 ' + i : '문제 사진'}">`).join('');
     $('stamp').hidden = true;
+    $('marksBox').hidden = true;
+    $('marksBox').innerHTML = '';
     $('answer').className = 'answer';
     $('answer').innerHTML = '';
     $('resultFoot').hidden = true;
@@ -348,6 +422,7 @@
     const note = $('note').value.trim();
     const at = new Date().toISOString();
     const images = [state.problem.thumb, ...(mode === 'check' ? state.work.map((w) => w.thumb) : [])];
+    const workFull = mode === 'check' ? state.work.map((w) => w.preview) : []; // 빨간 펜 표시를 그릴 원본 크기 풀이 사진
     state.busy = true;
     $('submitBtn').disabled = true;
     $('submitBtn').textContent = '풀이를 만드는 중...';
@@ -379,7 +454,7 @@
 
     try {
       const res = await callFn({
-        action: 'ask', mode, note, style: mode === 'solve' ? 'steps' : undefined,
+        action: 'ask', mode, note, style: mode === 'solve' ? 'steps' : undefined, marks: mode === 'check',
         problem: { type: state.problem.type, data: state.problem.data },
         work: mode === 'check' ? state.work.map((w) => ({ type: w.type, data: w.data })) : [],
       });
@@ -439,7 +514,7 @@
       if (failed) answerEl.insertAdjacentHTML('beforeend', `<p class="err">${esc(failed)}</p>`);
       else if (finished && finished.truncated) answerEl.insertAdjacentHTML('beforeend', '<p class="err">풀이가 길어서 중간에 끊겼어요.</p>');
       const verdict = mode === 'check' ? (finished?.verdict || parseVerdict(text) || 'unclear') : null;
-      if (mode === 'check') showStamp(verdict);
+      if (mode === 'check') { showStamp(verdict); paintMarks(text, workFull); }
       if (!failed) saveHistory({ id, mode, at, note, verdict, answer: text, images });
     }
     $('resultFoot').hidden = false;

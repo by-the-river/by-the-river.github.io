@@ -540,7 +540,8 @@
         const kakao = kakaoReady();
         if (kakao && Store.parentsOf(sid).length) {
           const id = crypto.randomUUID();
-          const url = location.origin + location.pathname.replace(/admin\.html$/, 'student.html') + '#reports/' + id;
+          // 관리자 주소가 /class/admin.html 이든 /class/admin 이든 같은 폴더의 student.html 로
+          const url = new URL('student.html#reports/' + id, location.href).href;
           const md = (d) => d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : '';
           const msg = `[안강엽 수학] ${s.name} 학생 학습 리포트 (${md(rep.from)}~${md(rep.to)})가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
           try {

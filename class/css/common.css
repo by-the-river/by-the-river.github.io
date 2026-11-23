@@ -139,3 +139,17 @@ input[type=file] { font: inherit; width: 100%; }
   .viewer-nav { width: 38px; height: 52px; font-size: 26px; }
   .viewer-btn[data-act="zoom"] { display: none; }
 }
+
+/* ---------- 첨삭 사진 위 빨간 펜 표시 (UI.markFigure) ---------- */
+.mark-wrap { position: relative; margin: 0; container-type: inline-size; line-height: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.mark-wrap + .mark-wrap { margin-top: 10px; }
+.mark-wrap img { display: block; width: 100%; height: auto; }
+.mark-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.mark-svg path { fill: none; stroke: #e5322d; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; opacity: .9; }
+.mark-note {
+  position: absolute; width: max-content; line-height: 1.05; pointer-events: none;
+  font-family: 'Nanum Pen Script', 'Comic Sans MS', cursive; font-size: max(18px, 5.6cqw); color: #e5322d;
+  word-break: keep-all; transform: rotate(-4deg); transform-origin: left top;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff;
+}
+.marks-off .mark-svg, .marks-off .mark-note { display: none; }

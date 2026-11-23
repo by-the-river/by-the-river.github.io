@@ -452,7 +452,7 @@
    *  - 질문노트(akymath.kr/ask)와 같은 서버 함수(ask)를 학생 로그인으로 호출 (횟수 제한 없음)
    *  - '풀이가 필요해요'는 단계별 풀이(style: steps)를 받아, 학생이 한 단계씩 눌러서 열어 봄
    * ============================================================ */
-  const ask = { form: { mode: 'solve', problem: null, work: [], note: '' }, pending: null, list: [], listLoaded: false, listLoading: false };
+  const ask = { form: { mode: 'solve', problem: null, work: [], note: '' }, pending: null, list: [], listLoaded: false, listLoading: false, previews: {} };
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
   const ASK_VERDICT = { correct: ['정답', 'badge-success'], wrong: ['오답', 'badge-danger'], unclear: ['확인 어려움', 'badge-warn'] };
@@ -501,8 +501,9 @@
     if (f.mode === 'check' && !f.work.length) return UI.toast('내 풀이 사진을 올려 주세요.', 'error');
     const mode = f.mode;
     const req = { mode, note: f.note.trim(), thumbs: [f.problem.thumb, ...(mode === 'check' ? f.work.map((w) => w.thumb) : [])], startedAt: Date.now(), chars: 0 };
+    const workPreviews = mode === 'check' ? f.work.map((w) => w.preview) : [];
     const body = {
-      action: 'ask', mode, style: 'steps', note: req.note, deviceId: 'app-' + me.id,
+      action: 'ask', mode, style: 'steps', marks: mode === 'check', note: req.note, deviceId: 'app-' + me.id,
       problem: { type: 'image/jpeg', data: f.problem.data },
       work: mode === 'check' ? f.work.map((w) => ({ type: 'image/jpeg', data: w.data })) : [],
     };
@@ -557,6 +558,7 @@
       verdict: mode === 'check' ? ((done && done.verdict) || { '정답': 'correct', '오답': 'wrong', '확인 어려움': 'unclear' }[verdictLine] || 'unclear') : null,
     };
     lsSet('ask-thumb-' + id, req.thumbs);
+    if (workPreviews.length) ask.previews[id] = workPreviews; // 방금 보낸 풀이 사진 (첨삭 표시용)
     ask.list.unshift(item);
     ask.form = { mode, problem: null, work: [], note: '' };
     if (failed) UI.toast(failed, 'error');
@@ -584,7 +586,7 @@
 
   async function loadAskList() {
     ask.listLoading = true;
-    const res = await Store.client.from('ask_questions').select('id, mode, verdict, note, answer, created_at')
+    const res = await Store.client.from('ask_questions').select('id, mode, verdict, note, answer, created_at, images')
       .eq('student_id', me.id).order('created_at', { ascending: false }).limit(50);
     ask.listLoading = false; ask.listLoaded = true;
     if (res.error) { console.warn(res.error); }
@@ -649,11 +651,32 @@
     return cards;
   }
 
+  // 첨삭: 학생 풀이 사진 위에 빨간 펜 표시 (답변 끝 ```marks 블록). 방금 보낸 사진은 메모리에서, 아니면 저장소에서
+  function askMarksSection(r) {
+    const marks = UI.askMarks(r.answer);
+    if (!marks.length) return '';
+    const local = ask.previews[r.id] || [];
+    const stored = (Array.isArray(r.images) ? r.images : []).filter((im) => im.kind === 'work');
+    const figs = [...new Set(marks.map((m) => m.img))].sort((a, b) => a - b).map((n) => {
+      const own = marks.filter((m) => m.img === n);
+      if (local[n - 1]) return UI.markFigure(`src="${local[n - 1]}"`, own);
+      if (stored[n - 1]) return UI.markFigure(`data-file-id="${esc(stored[n - 1].path)}"`, own);
+      return '';
+    }).join('');
+    if (!figs) return '';
+    return `
+      <section class="card stack" id="askMarks">
+        <div class="row between"><b>✏️ 내 풀이에 표시했어요</b><button type="button" class="link-btn" id="markToggle">표시 끄기</button></div>
+        ${figs}
+        <p class="muted small">AI가 표시한 위치라 조금 어긋날 수 있어요. 자세한 설명은 아래를 보세요.</p>
+      </section>`;
+  }
+
   async function askDetail(id) {
     let r = ask.list.find((x) => String(x.id) === id);
     if (!r) {
       $view.innerHTML = '<div class="empty">불러오는 중...</div>';
-      const res = await Store.client.from('ask_questions').select('id, mode, verdict, note, answer, created_at').eq('id', id).maybeSingle();
+      const res = await Store.client.from('ask_questions').select('id, mode, verdict, note, answer, created_at, images').eq('id', id).maybeSingle();
       if (res.error || !res.data) { $view.innerHTML = '<div class="empty">질문을 찾을 수 없어요</div>'; return; }
       r = res.data;
       ask.list.push(r);
@@ -669,7 +692,23 @@
       </section>`;
 
     if (r.mode === 'check') {
-      $view.innerHTML = `${head}<section class="card ask-md ${esc(r.verdict || '')}">${UI.renderMd(UI.stripVerdict(r.answer))}</section>`;
+      $view.innerHTML = `${head}${askMarksSection(r)}<section class="card ask-md ${esc(r.verdict || '')}">${UI.renderMd(UI.stripVerdict(r.answer))}</section>`;
+      const sec = document.getElementById('askMarks');
+      if (sec) {
+        const toggle = document.getElementById('markToggle');
+        const apply = () => {
+          const off = lsGet('ask-marks-off', false);
+          sec.classList.toggle('marks-off', off);
+          toggle.textContent = off ? '표시 켜기' : '표시 끄기';
+        };
+        toggle.onclick = () => { lsSet('ask-marks-off', !lsGet('ask-marks-off', false)); apply(); };
+        apply();
+        // 저장소에서 불러오는 사진: 못 불러오면(권한 등) 이 칸을 숨김
+        sec.querySelectorAll('img[data-file-id]').forEach((img) => img.onerror = () => sec.remove());
+        UI.hydrateImages(sec).then(() => {
+          if ([...sec.querySelectorAll('img[data-file-id]')].some((img) => !img.getAttribute('src'))) sec.remove();
+        }, () => sec.remove());
+      }
       return;
     }
 

@@ -569,7 +569,60 @@
         catch (e) { return UI.esc(m.tex); }
       });
     },
-    stripVerdict: (s) => String(s || '').replace(/^\s*판정:[^\n]*\n?/, ''),
+    // 첫 줄 '판정: ...' 과 끝의 ```marks 블록(사진 위 첨삭 표시 정보)을 뺀 본문
+    stripVerdict: (s) => String(s || '').replace(/^\s*판정:[^\n]*\n?/, '').replace(/\n*```marks\s*\n[\s\S]*?(?:```|$)\s*/g, '\n').trimEnd(),
+
+    /* ---------- 첨삭 사진 위 빨간 펜 표시 ---------- */
+    // 답변 끝의 ```marks {"marks":[{img, box:[x1,y1,x2,y2](0~1000), type, note}]} ``` 읽기
+    askMarks(answer) {
+      const m = String(answer || '').match(/```marks\s*\n([\s\S]*?)```/);
+      if (!m) return [];
+      let list;
+      try { list = JSON.parse(m[1]).marks; } catch (e) { return []; }
+      if (!Array.isArray(list)) return [];
+      const c = (v) => Math.max(0, Math.min(1000, Number(v) || 0));
+      return list.filter((x) => x && Array.isArray(x.box) && x.box.length === 4 && x.box.every((v) => Number.isFinite(Number(v))))
+        .map((x) => {
+          let [x1, y1, x2, y2] = x.box.map(c);
+          if (x2 < x1) [x1, x2] = [x2, x1];
+          if (y2 < y1) [y1, y2] = [y2, y1];
+          return {
+            img: Math.max(1, Math.round(Number(x.img) || 1)), box: [x1, y1, x2, y2],
+            type: ['strike', 'circle', 'underline'].includes(x.type) ? x.type : 'circle',
+            note: String(x.note || '').replace(/[$\\`]/g, '').slice(0, 40),
+          };
+        }).slice(0, 6);
+    },
+    // 사진 한 장 + 표시. imgAttrs: '<img ...>' 에 넣을 속성 (src=... 또는 data-file-id=...)
+    markFigure(imgAttrs, marks) {
+      const svg = marks.map(({ box: [x1, y1, x2, y2], type }) => {
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+        if (type === 'strike') return `<path d="M${x1 - 6} ${cy + 5} Q${cx} ${cy - 7} ${x2 + 6} ${cy - 3}"/>`;
+        if (type === 'underline') {
+          const y = Math.min(995, y2 + 6), n = Math.max(2, Math.round((x2 - x1) / 40)), w = (x2 - x1) / n;
+          let d = `M${x1} ${y}`;
+          for (let i = 0; i < n; i++) d += ` q${w / 2} ${i % 2 ? 5 : -5} ${w} 0`;
+          return `<path d="${d}"/>`;
+        }
+        // 손으로 그린 듯 살짝 덜 닫힌 타원
+        const rx = (x2 - x1) / 2 + 14, ry = (y2 - y1) / 2 + 14;
+        const pt = (deg) => `${(cx + rx * Math.cos(deg * Math.PI / 180)).toFixed(1)} ${(cy + ry * Math.sin(deg * Math.PI / 180)).toFixed(1)}`;
+        // 위쪽에서 시작해 시계 방향으로 한 바퀴 돌고, 끝은 조금 바깥으로 벌어지며 시작점을 지나침
+        return `<path d="M${pt(-110)} A${rx} ${ry} 0 0 1 ${pt(50)} A${rx * 1.07} ${ry * 1.12} 0 1 1 ${pt(-75)}"/>`;
+      }).join('');
+      const notes = marks.filter((m) => m.note).map(({ box: [x1, y1, x2, y2], type, note }) => {
+        const gap = type === 'circle' ? 36 : 18; // 동그라미는 바깥으로 더 커서 메모를 조금 더 띄움
+        const pos = [];
+        if (x2 <= 620) pos.push(`left:${(x2 + gap) / 10}%`, `top:${y1 / 10}%`, `max-width:${(1000 - x2 - 30) / 10}%`);
+        else {
+          if (x1 <= 500) pos.push(`left:${x1 / 10}%`, `max-width:${(1000 - x1 - 10) / 10}%`);
+          else pos.push(`right:${(1000 - x2) / 10}%`, `max-width:${(x2 - 10) / 10}%`);
+          pos.push(y2 <= 880 ? `top:${(y2 + 14) / 10}%` : `bottom:${(1000 - y1 + 14) / 10}%`);
+        }
+        return `<span class="mark-note" style="${pos.join(';')}">${UI.esc(note)}</span>`;
+      }).join('');
+      return `<figure class="mark-wrap"><img ${imgAttrs} alt="풀이 사진"><svg class="mark-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">${svg}</svg>${notes}</figure>`;
+    },
     // 한 줄 미리보기용: 수식 코드를 읽기 쉬운 글자로 (\dfrac{n}{\pi^2} → n/π²)
     plainTex(s) {
       const TEX = { le: '≤', leq: '≤', ge: '≥', geq: '≥', ne: '≠', neq: '≠', pi: 'π', alpha: 'α', beta: 'β', gamma: 'γ', theta: 'θ', infty: '∞', cdot: '·', times: '×', pm: '±', to: '→', sqrt: '√', lim: ' lim', sin: ' sin', cos: ' cos', tan: ' tan', ln: ' ln', log: ' log' };

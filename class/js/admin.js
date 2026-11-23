@@ -736,6 +736,11 @@
             <img data-file-id="${esc(im.path)}" alt="${esc(label)} ${i + 1}">
           </button>`).join('')}</div>`;
     };
+    // AI가 학생 풀이 사진 위에 표시한 빨간 펜 첨삭 (학생 앱에 보이는 것과 같은 모양)
+    const marks = r.mode === 'check' ? UI.askMarks(r.answer) : [];
+    const works = r.images.filter((im) => im.kind === 'work');
+    const markFigs = [...new Set(marks.map((m) => m.img))].sort((a, b) => a - b)
+      .map((n) => works[n - 1] ? UI.markFigure(`data-file-id="${esc(works[n - 1].path)}"`, marks.filter((m) => m.img === n)) : '').join('');
     const cost = (r.input_tokens || 0) * ASK_PRICE_IN + (r.output_tokens || 0) * ASK_PRICE_OUT;
     $view.innerHTML = `
       <div class="ask-detail">
@@ -750,11 +755,14 @@
           <p class="muted small">비용 약 $${cost.toFixed(3)} · 입력 ${(r.input_tokens || 0).toLocaleString()} / 출력 ${(r.output_tokens || 0).toLocaleString()} 토큰 · ${r.duration_ms ? Math.round(r.duration_ms / 1000) + '초' : ''}</p>
           <div class="row"><button class="btn btn-sm" id="askCopy">📋 답변 복사</button><button class="btn btn-sm btn-danger" id="askDelete">삭제</button></div>
         </section>
-        <section class="card ask-answer ${r.mode === 'check' ? esc(r.verdict || '') : ''}">${renderAnswer(r.answer)}</section>
+        <div class="stack" style="min-width:0">
+          ${markFigs ? `<section class="card stack ask-marks"><div class="card-title">✏️ 학생에게 보이는 사진 위 첨삭 표시</div>${markFigs}</section>` : ''}
+          <section class="card ask-answer ${r.mode === 'check' ? esc(r.verdict || '') : ''}">${renderAnswer(r.answer)}</section>
+        </div>
       </div>`;
     UI.hydrateImages($view);
     document.getElementById('askCopy').onclick = async () => {
-      UI.toast((await UI.copyText(String(r.answer || '').replace(/^\s*판정:[^\n]*\n?/, ''))) ? '답변을 복사했어요.' : '복사에 실패했어요.', 'ok');
+      UI.toast((await UI.copyText(UI.stripVerdict(r.answer))) ? '답변을 복사했어요.' : '복사에 실패했어요.', 'ok');
     };
     document.getElementById('askDelete').onclick = (e) => UI.busy(e.currentTarget, async () => {
       if (!confirm('이 질문과 사진을 삭제할까요? 되돌릴 수 없어요.')) return;

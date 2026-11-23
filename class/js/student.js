@@ -130,7 +130,8 @@
             throw new Error('학생 계정이 아니에요. 학부모님은 [학부모] 탭에서 로그인해 주세요.');
           }
         }
-        location.hash = '#home';
+        // 카톡으로 받은 리포트 링크(#reports/..)로 들어왔으면 로그인 후 그 리포트로 바로 이동
+        if (!location.hash.startsWith('#reports/')) location.hash = '#home';
         render();
       }, '로그인 중...');
     };
@@ -793,6 +794,10 @@
     reports(id) {
       if (id) {
         const r = Store.get('report_logs', id);
+        // 카톡 링크로 다른 자녀(형제·자매)의 리포트를 열면 그 자녀로 바꿔서 보여줌
+        if (r && r.studentId !== me.id && Store.childrenOf(parent.id).some((k) => k.id === r.studentId)) {
+          lsSet('parent-child', r.studentId); render(); return;
+        }
         if (!r || r.studentId !== me.id) { location.hash = '#reports'; return; }
         $view.innerHTML = `
           <article class="card stack">

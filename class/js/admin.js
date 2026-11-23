@@ -487,7 +487,7 @@
                 <span class="muted small" data-last="${s.id}">${lastText(last)}</span>
                 <span class="row wrap">
                   <button class="btn btn-sm" data-copy="${s.id}">📋 복사</button>
-                  <button class="btn btn-sm btn-kakao" data-kakao="${s.id}" title="휴대폰: 공유 창에서 카카오톡 선택 · PC: 복사 후 카카오톡에 붙여넣기">💛 카톡 공유</button>
+                  <button class="btn btn-sm btn-kakao" data-kakao="${s.id}" title="${hasApp && kakaoReady() ? '카카오톡 대화방을 골라 [리포트 보기] 링크를 보내요 (리포트는 학부모 앱에 저장)' : '학부모 앱 계정이 없으면 리포트 글을 공유/복사해요'}">💛 카톡 보내기</button>
                   ${s.parentPhone ? `<a class="btn btn-sm" data-sms="${s.id}" href="#">💬 문자 보내기</a>` : ''}
                   ${hasApp ? `<button class="btn btn-sm btn-primary" data-app="${s.id}">📱 학부모 앱으로 보내기</button>`
                     : `<a class="btn btn-sm" href="#students/${s.id}" title="학부모 앱 계정을 만들면 앱으로 바로 보낼 수 있어요">📱 앱 계정 만들기</a>`}
@@ -518,9 +518,9 @@
       });
 
       const textOf = (sid) => $view.querySelector(`[data-text="${sid}"]`).value;
-      const logSend = async (sid, channel) => {
+      const logSend = async (sid, channel, extra = {}) => {
         try {
-          const row = await Store.insert('report_logs', { studentId: sid, channel, periodStart: rep.from, periodEnd: rep.to, content: textOf(sid) });
+          const row = await Store.insert('report_logs', { ...extra, studentId: sid, channel, periodStart: rep.from, periodEnd: rep.to, content: textOf(sid) });
           const el = $view.querySelector(`[data-last="${sid}"]`);
           if (el) el.textContent = lastText(row);
         } catch (e) {
@@ -532,7 +532,33 @@
       };
       $view.querySelectorAll('[data-kakao]').forEach((b) => b.onclick = async () => {
         const sid = b.dataset.kakao;
+        const s = Store.get('students', sid);
         const text = textOf(sid);
+
+        // 1) 카카오 공식 공유: 카톡 친구·대화방 선택 창 → 요약 + [리포트 보기] 버튼 (학부모 앱 리포트로 연결)
+        //    본문은 200자 제한이라 리포트 전체는 학부모 앱에 'app' 기록으로 저장 (읽음 표시도 됨)
+        const kakao = kakaoReady();
+        if (kakao && Store.parentsOf(sid).length) {
+          const id = crypto.randomUUID();
+          const url = location.origin + location.pathname.replace(/admin\.html$/, 'student.html') + '#reports/' + id;
+          const md = (d) => d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : '';
+          const msg = `[안강엽 수학] ${s.name} 학생 학습 리포트 (${md(rep.from)}~${md(rep.to)})가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
+          try {
+            // 팝업이 막히지 않도록 클릭 직후 바로 띄우고, 기록은 그다음에 저장
+            kakao.Share.sendDefault({
+              objectType: 'text', text: msg.slice(0, 200), buttonTitle: '리포트 보기',
+              link: { webUrl: url, mobileWebUrl: url },
+            });
+          } catch (e) {
+            console.error(e);
+            return UI.toast('카카오톡 공유 창을 열지 못했어요: ' + UI.errMsg(e), 'error');
+          }
+          try { await logSend(sid, 'app', { id }); }
+          catch (e) { UI.toast('리포트 저장에 실패했어요. 학부모님이 링크를 열어도 안 보일 수 있어요: ' + UI.errMsg(e), 'error'); }
+          return;
+        }
+
+        // 2) 학부모 앱 계정이 없거나 카카오 키가 없을 때: 리포트 전체 글을 공유/복사
         // 휴대폰(터치 기기)은 공유 창 → 카카오톡 선택. PC 공유 창에는 카카오톡이 잘 안 나와서 복사로 처리
         const mobile = window.matchMedia && matchMedia('(pointer: coarse)').matches;
         if (navigator.share && mobile) {
@@ -546,7 +572,8 @@
         }
         const ok = await UI.copyText(text);
         if (!ok) return UI.toast('복사에 실패했어요. 직접 선택해서 복사해주세요.', 'error');
-        UI.toast('복사했어요. 카카오톡 대화방에 붙여넣으세요 (Ctrl+V).');
+        UI.toast(kakao ? '학부모 앱 계정이 없어서 리포트 글을 복사했어요. 카카오톡 대화방에 붙여넣으세요 (Ctrl+V).'
+          : '복사했어요. 카카오톡 대화방에 붙여넣으세요 (Ctrl+V).');
         logSend(sid, 'kakao');
       });
       $view.querySelectorAll('[data-app]').forEach((b) => b.onclick = () => {
@@ -748,6 +775,13 @@
   };
   const md = (v) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}`;
   const CHANNEL = { sms: '문자', copy: '복사', app: '앱', kakao: '카톡' };
+  // 카카오 JavaScript SDK (config.js 의 KAKAO_JS_KEY 가 있을 때만 사용)
+  function kakaoReady() {
+    const key = (window.APP_CONFIG || {}).KAKAO_JS_KEY;
+    if (!key || !window.Kakao) return null;
+    try { if (!Kakao.isInitialized()) Kakao.init(key); return Kakao; }
+    catch (e) { console.error(e); return null; }
+  }
   const lastText = (l) => (l
     ? `최근 발송 ${UI.fmtDateTime(l.createdAt)} (${CHANNEL[l.channel] || l.channel}${l.channel === 'app' ? (l.readAt ? ' · 읽음 ✓' : ' · 안 읽음') : ''})`
     : '발송 기록 없음');

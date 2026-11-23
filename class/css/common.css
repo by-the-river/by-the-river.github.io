@@ -65,6 +65,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn:hover { background: var(--surface-2); }
 .btn-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
 .btn-primary:hover { background: var(--primary-dark); }
+.btn-kakao { background: #FEE500; border-color: #FEE500; color: #191919; }
+.btn-kakao:hover { background: #F5DC00; }
 .btn-danger { color: var(--danger); }
 .btn-danger:hover { background: var(--danger-weak); border-color: #f5c6c6; }
 .btn-sm { padding: 6px 10px; font-size: 13px; border-radius: 8px; }

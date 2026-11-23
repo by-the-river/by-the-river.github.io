@@ -487,6 +487,7 @@
                 <span class="muted small" data-last="${s.id}">${lastText(last)}</span>
                 <span class="row wrap">
                   <button class="btn btn-sm" data-copy="${s.id}">📋 복사</button>
+                  <button class="btn btn-sm btn-kakao" data-kakao="${s.id}" title="휴대폰: 공유 창에서 카카오톡 선택 · PC: 복사 후 카카오톡에 붙여넣기">💛 카톡 공유</button>
                   ${s.parentPhone ? `<a class="btn btn-sm" data-sms="${s.id}" href="#">💬 문자 보내기</a>` : ''}
                   ${hasApp ? `<button class="btn btn-sm btn-primary" data-app="${s.id}">📱 학부모 앱으로 보내기</button>`
                     : `<a class="btn btn-sm" href="#students/${s.id}" title="학부모 앱 계정을 만들면 앱으로 바로 보낼 수 있어요">📱 앱 계정 만들기</a>`}
@@ -523,10 +524,31 @@
           const el = $view.querySelector(`[data-last="${sid}"]`);
           if (el) el.textContent = lastText(row);
         } catch (e) {
+          // kakao 채널은 supabase/kakao-share.sql 실행 전이면 거부됨 → 복사로 기록
+          if (channel === 'kakao') return logSend(sid, 'copy');
           console.error(e);
           if (channel === 'app') throw e; // 앱 발송 실패는 알려야 함
         }
       };
+      $view.querySelectorAll('[data-kakao]').forEach((b) => b.onclick = async () => {
+        const sid = b.dataset.kakao;
+        const text = textOf(sid);
+        // 휴대폰(터치 기기)은 공유 창 → 카카오톡 선택. PC 공유 창에는 카카오톡이 잘 안 나와서 복사로 처리
+        const mobile = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+        if (navigator.share && mobile) {
+          try {
+            await navigator.share({ text });
+            logSend(sid, 'kakao');
+            return;
+          } catch (e) {
+            if (e && e.name === 'AbortError') return; // 공유 창을 닫음
+          }
+        }
+        const ok = await UI.copyText(text);
+        if (!ok) return UI.toast('복사에 실패했어요. 직접 선택해서 복사해주세요.', 'error');
+        UI.toast('복사했어요. 카카오톡 대화방에 붙여넣으세요 (Ctrl+V).');
+        logSend(sid, 'kakao');
+      });
       $view.querySelectorAll('[data-app]').forEach((b) => b.onclick = () => {
         const s = Store.get('students', b.dataset.app);
         if (!confirm(`${s.name} 학생 학부모님 앱으로 이 리포트를 보낼까요?\n(보낸 뒤에는 학부모님 앱에 바로 표시돼요)`)) return;
@@ -725,7 +747,7 @@
       || '궁금하신 점은 언제든 연락 주세요. 감사합니다.',
   };
   const md = (v) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}`;
-  const CHANNEL = { sms: '문자', copy: '복사', app: '앱' };
+  const CHANNEL = { sms: '문자', copy: '복사', app: '앱', kakao: '카톡' };
   const lastText = (l) => (l
     ? `최근 발송 ${UI.fmtDateTime(l.createdAt)} (${CHANNEL[l.channel] || l.channel}${l.channel === 'app' ? (l.readAt ? ' · 읽음 ✓' : ' · 안 읽음') : ''})`
     : '발송 기록 없음');

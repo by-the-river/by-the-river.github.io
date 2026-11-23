@@ -602,20 +602,54 @@
     },
     // 사진 한 장 + 표시. imgAttrs: '<img ...>' 에 넣을 속성 (src=... 또는 data-file-id=...)
     markFigure(imgAttrs, marks) {
+      // 손으로 그린 느낌: 선을 조금씩 흔들고, 같은 질문은 늘 같은 모양이 나오도록 표시 위치로 난수 씨앗을 만듦
+      const rng = (seed) => () => {
+        seed = (seed + 0x6D2B79F5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+      const f = (v) => v.toFixed(1);
+      // 점들을 부드럽게 이은 곡선 (점 사이 중간점을 2차 곡선으로)
+      const curve = (p) => {
+        let d = `M${f(p[0][0])} ${f(p[0][1])}`;
+        for (let i = 1; i < p.length - 1; i++) d += ` Q${f(p[i][0])} ${f(p[i][1])} ${f((p[i][0] + p[i + 1][0]) / 2)} ${f((p[i][1] + p[i + 1][1]) / 2)}`;
+        const l = p[p.length - 1];
+        return `${d} L${f(l[0])} ${f(l[1])}`;
+      };
+      // 펜 한 획 = 진한 선 + 살짝 어긋난 옅은 선 (잉크 번짐·펜 압력 느낌)
+      const stroke = (pts, rand) => `<path class="ink" d="${curve(pts)}"/>`
+        + `<path class="ghost" d="${curve(pts.map(([x, y]) => [x + 0.6 + (rand() - 0.5) * 1.6, y + 0.8 + (rand() - 0.5) * 1.6]))}"/>`;
       const svg = marks.map(({ box: [x1, y1, x2, y2], type }) => {
-        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
-        if (type === 'strike') return `<path d="M${x1 - 6} ${cy + 5} Q${cx} ${cy - 7} ${x2 + 6} ${cy - 3}"/>`;
-        if (type === 'underline') {
-          const y = Math.min(995, y2 + 6), n = Math.max(2, Math.round((x2 - x1) / 40)), w = (x2 - x1) / n;
-          let d = `M${x1} ${y}`;
-          for (let i = 0; i < n; i++) d += ` q${w / 2} ${i % 2 ? 5 : -5} ${w} 0`;
-          return `<path d="${d}"/>`;
+        const rand = rng(Math.round(x1 * 7 + y1 * 13 + x2 * 17 + y2 * 19));
+        const j = (a) => (rand() - 0.5) * 2 * a;
+        const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, w = x2 - x1, h = y2 - y1;
+        if (type === 'strike') {
+          // 오른쪽 위로 살짝 올라가며 끝을 조금 넘겨 긋는 한 획
+          const n = Math.max(6, Math.round(w / 30)), sx = x1 - 10 + j(4), ex = x2 + 12 + j(5);
+          const sy = cy + h * 0.18 + j(3), ey = cy - h * 0.12 + j(3);
+          return stroke(Array.from({ length: n + 1 }, (_, i) => {
+            const t = i / n;
+            return [sx + (ex - sx) * t + j(2), sy + (ey - sy) * t - Math.sin(t * Math.PI) * (3 + rand() * 3) + j(1.8)];
+          }), rand);
         }
-        // 손으로 그린 듯 살짝 덜 닫힌 타원
-        const rx = (x2 - x1) / 2 + 14, ry = (y2 - y1) / 2 + 14;
-        const pt = (deg) => `${(cx + rx * Math.cos(deg * Math.PI / 180)).toFixed(1)} ${(cy + ry * Math.sin(deg * Math.PI / 180)).toFixed(1)}`;
-        // 위쪽에서 시작해 시계 방향으로 한 바퀴 돌고, 끝은 조금 바깥으로 벌어지며 시작점을 지나침
-        return `<path d="M${pt(-110)} A${rx} ${ry} 0 0 1 ${pt(50)} A${rx * 1.07} ${ry * 1.12} 0 1 1 ${pt(-75)}"/>`;
+        if (type === 'underline') {
+          // 물결 밑줄: 물결 높이와 간격이 조금씩 다르게
+          const y = Math.min(994, y2 + 7), n = Math.max(10, Math.round(w / 10)), waves = Math.max(2, Math.round(w / 45));
+          return stroke(Array.from({ length: n + 1 }, (_, i) => {
+            const t = i / n;
+            return [x1 - 6 + (w + 14) * t + j(1.5), y + t * j(6) + Math.sin(t * waves * Math.PI * 2) * (4 + rand() * 2.5)];
+          }), rand);
+        }
+        // 동그라미: 한 바퀴 조금 넘게 돌며 반지름이 조금씩 커져 끝이 시작점과 겹침
+        const rx = w / 2 + 16, ry = h / 2 + 16, start = -115 + j(15), tilt = j(0.08);
+        const pts = [];
+        for (let a = 0; a <= 385; a += 12) {
+          const t = a / 385, r = 1 + 0.07 * t + j(0.025), rad = (start + a) * Math.PI / 180;
+          const ex = Math.cos(rad) * rx * r, ey = Math.sin(rad) * ry * r;
+          pts.push([cx + j(1) + ex - ey * tilt, cy + j(1) + ey + ex * tilt]);
+        }
+        return stroke(pts, rand);
       }).join('');
       const notes = marks.filter((m) => m.note).map(({ box: [x1, y1, x2, y2], type, note }) => {
         const gap = type === 'circle' ? 36 : 18; // 동그라미는 바깥으로 더 커서 메모를 조금 더 띄움
@@ -626,7 +660,11 @@
           else pos.push(`right:${(1000 - x2) / 10}%`, `max-width:${(x2 - 10) / 10}%`);
           pos.push(y2 <= 880 ? `top:${(y2 + 14) / 10}%` : `bottom:${(1000 - y1 + 14) / 10}%`);
         }
-        return `<span class="mark-note" style="${pos.join(';')}">${UI.esc(note)}</span>`;
+        // 글자마다 기울기·높이·크기를 조금씩 다르게 (손으로 쓴 줄은 반듯하지 않음)
+        const rand = rng(Math.round(x1 * 3 + y2 * 11));
+        const tilt = (-3 - rand() * 4).toFixed(1);
+        const chars = [...note].map((ch) => ch === ' ' ? ' ' : `<i style="transform:translateY(${((rand() - 0.5) * 0.14).toFixed(2)}em) rotate(${((rand() - 0.5) * 9).toFixed(1)}deg) scale(${(0.9 + rand() * 0.18).toFixed(2)})">${UI.esc(ch)}</i>`).join('');
+        return `<span class="mark-note" style="${pos.join(';')};transform:rotate(${tilt}deg)">${chars}</span>`;
       }).join('');
       return `<figure class="mark-wrap"><img ${imgAttrs} alt="풀이 사진"><svg class="mark-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">${svg}</svg>${notes}</figure>`;
     },

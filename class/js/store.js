@@ -660,11 +660,7 @@
           else pos.push(`right:${(1000 - x2) / 10}%`, `max-width:${(x2 - 10) / 10}%`);
           pos.push(y2 <= 880 ? `top:${(y2 + 14) / 10}%` : `bottom:${(1000 - y1 + 14) / 10}%`);
         }
-        // 글자마다 기울기·높이·크기를 조금씩 다르게 (손으로 쓴 줄은 반듯하지 않음)
-        const rand = rng(Math.round(x1 * 3 + y2 * 11));
-        const tilt = (-3 - rand() * 4).toFixed(1);
-        const chars = [...note].map((ch) => ch === ' ' ? ' ' : `<i style="transform:translateY(${((rand() - 0.5) * 0.14).toFixed(2)}em) rotate(${((rand() - 0.5) * 9).toFixed(1)}deg) scale(${(0.9 + rand() * 0.18).toFixed(2)})">${UI.esc(ch)}</i>`).join('');
-        return `<span class="mark-note" style="${pos.join(';')};transform:rotate(${tilt}deg)">${chars}</span>`;
+        return `<span class="mark-note" style="${pos.join(';')}">${UI.esc(note)}</span>`;
       }).join('');
       return `<figure class="mark-wrap"><img ${imgAttrs} alt="풀이 사진"><svg class="mark-svg" viewBox="0 0 1000 1000" preserveAspectRatio="none">${svg}</svg>${notes}</figure>`;
     },

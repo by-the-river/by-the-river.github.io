@@ -261,8 +261,11 @@
           let [x1, y1, x2, y2] = x.box.map((v, i) => c(Number(v) * 1000 / (i % 2 ? sh : sw)));
           if (x2 < x1) [x1, x2] = [x2, x1];
           if (y2 < y1) [y1, y2] = [y2, y1];
+          // note_at: AI가 고른 메모 자리(빈 곳, 메모 왼쪽 위). 없으면 표시 옆에 자동 배치
+          const at = Array.isArray(x.note_at) && x.note_at.length === 2 && x.note_at.every((v) => Number.isFinite(Number(v)))
+            ? [c(Number(x.note_at[0]) * 1000 / sw), c(Number(x.note_at[1]) * 1000 / sh)] : null;
           return {
-            img, box: [x1, y1, x2, y2],
+            img, box: [x1, y1, x2, y2], at,
             type: ['strike', 'circle', 'underline'].includes(x.type) ? x.type : 'circle',
             note: String(x.note || '').replace(/[$\\`]/g, '').slice(0, 40),
           };
@@ -285,10 +288,11 @@
         // 위쪽에서 시작해 시계 방향으로 한 바퀴 돌고, 끝은 조금 바깥으로 벌어지며 시작점을 지나침
         return `<path d="M${pt(-110)} A${rx} ${ry} 0 0 1 ${pt(50)} A${rx * 1.07} ${ry * 1.12} 0 1 1 ${pt(-75)}"/>`;
       }).join('');
-      const notes = marks.filter((m) => m.note).map(({ box: [x1, y1, x2, y2], type, note }) => {
+      const notes = marks.filter((m) => m.note).map(({ box: [x1, y1, x2, y2], type, note, at }) => {
         const gap = type === 'circle' ? 36 : 18; // 동그라미는 바깥으로 더 커서 메모를 조금 더 띄움
         const pos = [];
-        if (x2 <= 620) pos.push(`left:${(x2 + gap) / 10}%`, `top:${y1 / 10}%`, `max-width:${(1000 - x2 - 30) / 10}%`);
+        if (at) pos.push(`left:${at[0] / 10}%`, `top:${at[1] / 10}%`, `max-width:${Math.max(250, 1000 - at[0] - 10) / 10}%`);
+        else if (x2 <= 620) pos.push(`left:${(x2 + gap) / 10}%`, `top:${y1 / 10}%`, `max-width:${(1000 - x2 - 30) / 10}%`);
         else {
           if (x1 <= 500) pos.push(`left:${x1 / 10}%`, `max-width:${(1000 - x1 - 10) / 10}%`);
           else pos.push(`right:${(1000 - x2) / 10}%`, `max-width:${(x2 - 10) / 10}%`);

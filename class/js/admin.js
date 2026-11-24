@@ -513,7 +513,7 @@
             </div>` : `
             <label class="field"><span>월</span><input type="month" name="month" value="${rep.month}"></label>
             <div class="field"><span>기간</span><b style="padding-top:8px">${md(per.from)} ~ ${md(per.to)}</b></div>`}
-            <label class="field"><span>호칭</span><select name="honor">${['학부모님', '어머님', '아버님', '어머님, 아버님'].map((h) => `<option ${h === rep.honor ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
+            <label class="field"><span>호칭</span><select name="honor">${[['', '없음'], ['어머님', '어머님'], ['아버님', '아버님'], ['어머님, 아버님', '어머님, 아버님']].map(([v, t]) => `<option value="${v}" ${v === rep.honor ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
             <div class="field span-2"><span>포함</span>
               <label class="check" style="padding-top:8px"><input type="checkbox" name="fb" ${rep.fb ? 'checked' : ''}> 선생님 피드백(숙제·테스트에 적은 말)도 넣기</label>
             </div>
@@ -615,7 +615,7 @@
           const id = crypto.randomUUID();
           // 관리자 주소가 /class/admin.html 이든 /class/admin 이든 같은 폴더의 student.html 로
           const url = new URL('student.html#reports/' + id, location.href).href;
-          const msg = `[${Store.settings().academyName}] ${s.name} 학생 ${label}가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
+          const msg = `[안강엽T] ${s.name} 학생 ${label}가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
           try {
             // 팝업이 막히지 않도록 클릭 직후 바로 띄우고, 기록은 그다음에 저장
             kakao.Share.sendDefault({
@@ -968,7 +968,7 @@
     weekFrom: ReportText.lastWeek().from,
     month: ReportText.defaultMonth(),
     fb: true,
-    honor: lsGet('lms_report_honor') || '학부모님',
+    honor: (lsGet('lms_report_honor') || '').replace('학부모님', ''),
     closing: lsGet('lms_report_closing') || '궁금하신 점은 언제든 연락 주세요. 감사합니다.',
     off: {},     // '학생id|항목id' → true 면 리포트에서 뺌
     weakOn: {},  // 학생id → 취약 부분 넣기 (없으면 취약 체크가 있을 때만 넣음)
@@ -1014,7 +1014,7 @@
   }
   function buildReport(s) {
     const { from, to } = period();
-    const opt = { academy: Store.settings().academyName, honor: rep.honor, closing: rep.closing, fb: rep.fb, from, to, shuffle: rep.shuffle[s.id] || 0 };
+    const opt = { academy: '안강엽T', honor: rep.honor, closing: rep.closing, fb: rep.fb, from, to, shuffle: rep.shuffle[s.id] || 0 };
     if (rep.kind === 'monthly') return ReportText.monthly(s, opt);
     const { pick, weakOn } = weeklyPick(s);
     return ReportText.weekly(s, { ...opt, pick, weakOn });

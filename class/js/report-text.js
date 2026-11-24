@@ -299,17 +299,20 @@
   function weekly(s, opt) {
     const N = nick(s.name);
     const P = picker(Math.floor(dayIndex(opt.from) / 7) + (opt.shuffle || 0), s.id);
-    const H = opt.honor || '학부모님';
+    const H = opt.honor && opt.honor !== '학부모님' ? opt.honor : '';
+    const hi1 = H ? `안녕하세요, ${H}.` : '안녕하세요.';
+    const hi3 = H ? `${H}, 안녕하세요.` : '안녕하세요.';
+    const hi2 = H ? `안녕하세요 ${H}, ${opt.academy}입니다.` : `안녕하세요, ${opt.academy}입니다.`;
     const today = UI.todayStr();
     const L = [`[${opt.academy}] ${s.name} 학생 주간 학습 리포트`, `${weekLabel(opt.from)} (${md(opt.from)} ~ ${md(opt.to)})`, ''];
 
     const season = P('season', [...seasonPool(today), '', '']);
     L.push(P('hello', [
-      `안녕하세요, ${H}. ${opt.academy}입니다. ${season} 지난 한 주 ${N}의 학습 내용을 정리해 말씀드립니다.`,
-      `안녕하세요 ${H}, ${opt.academy}입니다. ${season} ${N}의 지난주 공부 내용을 공유드립니다.`,
-      `${H}, 안녕하세요. ${opt.academy}입니다. ${season} 한 주 동안 ${J(N, '가')} 어떻게 공부했는지 정리해 보았습니다.`,
-      `안녕하세요, ${H}. 한 주 잘 보내셨나요? ${opt.academy}입니다. ${N}의 지난주 학습 상황을 전해 드립니다.`,
-      `안녕하세요, ${H}. ${opt.academy}입니다. ${season} ${weekLabel(opt.from)} ${N}의 학습 리포트를 보내 드립니다.`,
+      `${hi1} ${opt.academy}입니다. ${season} 지난 한 주 ${N}의 학습 내용을 정리해 말씀드립니다.`,
+      `${hi2} ${season} ${N}의 지난주 공부 내용을 공유드립니다.`,
+      `${hi3} ${opt.academy}입니다. ${season} 한 주 동안 ${J(N, '가')} 어떻게 공부했는지 정리해 보았습니다.`,
+      `${hi1} 한 주 잘 보내셨나요? ${opt.academy}입니다. ${N}의 지난주 학습 상황을 전해 드립니다.`,
+      `${hi1} ${opt.academy}입니다. ${season} ${weekLabel(opt.from)} ${N}의 학습 리포트를 보내 드립니다.`,
     ]).replace(/\s{2,}/g, ' '));
 
     const tests = opt.pick.tests;
@@ -354,13 +357,16 @@
     const N = nick(s.name);
     const m = Number(opt.from.slice(5, 7));
     const P = picker(Number(opt.from.slice(0, 4)) * 12 + m + (opt.shuffle || 0), s.id);
-    const H = opt.honor || '학부모님';
+    const H = opt.honor && opt.honor !== '학부모님' ? opt.honor : '';
+    const hi1 = H ? `안녕하세요, ${H}.` : '안녕하세요.';
+    const hi3 = H ? `${H}, 안녕하세요.` : '안녕하세요.';
+    const hi2 = H ? `안녕하세요 ${H}, ${opt.academy}입니다.` : `안녕하세요, ${opt.academy}입니다.`;
     const { tests, hw } = items(s, opt.from, opt.to);
     const L = [`[${opt.academy}] ${s.name} 학생 ${m}월 월간 리포트`, `기간: ${md(opt.from)} ~ ${md(opt.to)}`, ''];
     L.push(P('hello', [
-      `안녕하세요, ${H}. ${opt.academy}입니다. ${N}의 ${m}월 학습 현황을 정리해 보내 드립니다.`,
-      `안녕하세요 ${H}, ${opt.academy}입니다. ${m}월 한 달 동안 ${N}의 숙제와 테스트 결과를 정리했습니다.`,
-      `${H}, 안녕하세요. ${opt.academy}입니다. ${N}의 ${m}월 월간 리포트를 보내 드립니다.`,
+      `${hi1} ${opt.academy}입니다. ${N}의 ${m}월 학습 현황을 정리해 보내 드립니다.`,
+      `${hi2} ${m}월 한 달 동안 ${N}의 숙제와 테스트 결과를 정리했습니다.`,
+      `${hi3} ${opt.academy}입니다. ${N}의 ${m}월 월간 리포트를 보내 드립니다.`,
     ]));
 
     // 숙제

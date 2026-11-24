@@ -166,3 +166,24 @@ td .title-link:hover { color: var(--primary); }
 .pt.add { border-style: dashed; color: var(--muted); background: transparent; }
 @media (max-width: 520px) { .unit-list { grid-template-columns: 1fr; } }
 .range-card { border-color: var(--primary); background: linear-gradient(var(--primary-weak), var(--surface) 70px); }
+
+/* 학부모 리포트 위쪽 설정 바 */
+.rep-bar { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.rep-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
+.rep-bar select, .rep-bar input[type=month] { width: auto; padding: 7px 10px; font-size: 14px; }
+.rep-kind button { padding: 8px 16px; font-size: 14px; }
+.rep-class { min-width: 160px; max-width: 280px; }
+.rep-period { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rep-count { margin-left: auto; }
+.rep-sub { padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.rep-opt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.rep-opt select { padding: 5px 8px; font-size: 13px; }
+.rep-sub .check { color: var(--text); font-weight: 500; }
+.rep-more { min-width: 0; }
+.rep-more > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 600; max-width: 380px; white-space: nowrap; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
+.rep-more > summary::-webkit-details-marker { display: none; }
+.rep-more[open] { flex-basis: 100%; }
+.rep-more[open] > summary { margin-bottom: 8px; max-width: none; width: fit-content; }
+.rep-more[open] > summary .ellipsis { display: none; }
+.rep-more textarea { min-height: 60px; }
+@media (max-width: 720px) { .rep-count { margin-left: 0; } .rep-class { max-width: 100%; } }

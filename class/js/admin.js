@@ -495,33 +495,41 @@
       const weekly = rep.kind === 'weekly';
       const per = period();
       const noUnits = !Store.all('units').length;
-      const tab = (k, label) => `<button class="chip ${rep.kind === k ? 'active' : ''}" data-kind="${k}">${label}</button>`;
+      const tab = (k, label) => `<button type="button" class="${rep.kind === k ? 'on' : ''}" data-kind="${k}">${label}</button>`;
+      const closingShort = (rep.closing || '').trim() || '없음';
 
       $view.innerHTML = `
-        <div class="filter-bar">${tab('weekly', '📅 주간 리포트')}${tab('monthly', '🗓️ 월간 리포트')}</div>
-        <section class="card stack" id="repOptions">
-          <div class="form-grid">
-            <label class="field"><span>반</span><select name="className">${classOptions(rep.className)}</select></label>
+        <section class="card rep-bar" id="repOptions">
+          <div class="rep-row">
+            <div class="seg rep-kind">${tab('weekly', '📅 주간')}${tab('monthly', '🗓️ 월간')}</div>
+            <select name="className" class="rep-class" aria-label="반">${classOptions(rep.className)}</select>
             ${weekly ? `
-            <div class="field span-2"><span>기간 (보내는 주의 전주가 기본)</span>
-              <div class="row wrap" style="gap:6px">
-                <button type="button" class="btn btn-sm" data-week="-1" title="이전 주">◀</button>
-                <b style="min-width:190px;text-align:center">${ReportText.weekLabel(per.from)} · ${md(per.from)}(월) ~ ${md(per.to)}(일)</b>
-                <button type="button" class="btn btn-sm" data-week="1" title="다음 주">▶</button>
-                ${rep.weekFrom !== ReportText.lastWeek().from ? '<button type="button" class="btn btn-sm" data-week="0">지난주로</button>' : ''}
-              </div>
+            <div class="rep-period">
+              <button type="button" class="btn btn-sm" data-week="-1" title="이전 주">◀</button>
+              <span><b>${ReportText.weekLabel(per.from)}</b> <span class="muted">${md(per.from)}(월) ~ ${md(per.to)}(일)</span></span>
+              <button type="button" class="btn btn-sm" data-week="1" title="다음 주">▶</button>
+              ${rep.weekFrom !== ReportText.lastWeek().from ? '<button type="button" class="btn btn-sm" data-week="0">지난주로</button>' : ''}
             </div>` : `
-            <label class="field"><span>월</span><input type="month" name="month" value="${rep.month}"></label>
-            <div class="field"><span>기간</span><b style="padding-top:8px">${md(per.from)} ~ ${md(per.to)}</b></div>`}
-            <label class="field"><span>호칭</span><select name="honor">${[['', '없음'], ['어머님', '어머님'], ['아버님', '아버님'], ['어머님, 아버님', '어머님, 아버님']].map(([v, t]) => `<option value="${v}" ${v === rep.honor ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
-            <div class="field span-2"><span>포함</span>
-              <label class="check" style="padding-top:8px"><input type="checkbox" name="fb" ${rep.fb ? 'checked' : ''}> 선생님 피드백(숙제·테스트에 적은 말)도 넣기</label>
-            </div>
-            <label class="field span-2"><span>마무리 문구 (항상 맨 끝에 들어가요)</span><textarea name="closing" rows="2">${esc(rep.closing)}</textarea></label>
+            <div class="rep-period">
+              <input type="month" name="month" value="${rep.month}" aria-label="월">
+              <span class="muted">${md(per.from)} ~ ${md(per.to)}</span>
+            </div>`}
+            <span class="muted small rep-count">학생 ${students.length}명</span>
           </div>
-          <p class="muted small">💡 ${weekly
-            ? '주간 리포트는 지난주 테스트·숙제 중 <b>체크한 것만</b> 들어가고, 🔍 취약 체크에 적은 단원별 약점이 상담하는 말투로 정리돼요. 문장 표현은 매주 자동으로 바뀌고, [🔄 다른 문구]를 누르면 다른 표현으로 다시 만들어져요.'
-            : '월간 리포트는 그 달의 숙제 제출 여부와 테스트 성적을 정리해요.'} 아래 글은 보내기 전에 직접 고칠 수 있어요 (체크를 바꾸거나 [다른 문구]를 누르면 고친 내용은 다시 만들어져요).</p>
+          <div class="rep-row rep-sub">
+            <label class="rep-opt">호칭 <select name="honor">${[['', '없음'], ['어머님', '어머님'], ['아버님', '아버님'], ['어머님, 아버님', '어머님, 아버님']].map(([v, t]) => `<option value="${v}" ${v === rep.honor ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+            <label class="check rep-opt"><input type="checkbox" name="fb" ${rep.fb ? 'checked' : ''}> 선생님 피드백 넣기</label>
+            <details class="rep-more" data-ui="closing" ${rep.ui.closing ? 'open' : ''}>
+              <summary>✏️ 마무리 문구 <span class="muted ellipsis">${esc(closingShort)}</span></summary>
+              <textarea name="closing" rows="2" placeholder="항상 리포트 맨 끝에 들어가요">${esc(rep.closing)}</textarea>
+            </details>
+            <details class="rep-more" data-ui="help" ${rep.ui.help ? 'open' : ''}>
+              <summary>ℹ️ 도움말</summary>
+              <p class="muted small">${weekly
+                ? '주간 리포트는 지난주 테스트·숙제 중 <b>체크한 것만</b> 들어가고, 🔍 취약 체크에 적은 단원별 약점이 상담하는 말투로 정리돼요. 문장 표현은 매주 자동으로 바뀌고, [🔄 다른 문구]를 누르면 다른 표현으로 다시 만들어져요.'
+                : '월간 리포트는 그 달의 숙제 제출 여부와 테스트 성적을 정리해요.'} 아래 글은 보내기 전에 직접 고칠 수 있어요 (체크를 바꾸거나 [다른 문구]를 누르면 고친 내용은 다시 만들어져요).</p>
+            </details>
+          </div>
           ${weekly && noUnits ? '<p class="small" style="color:var(--warn)">⚠️ 아직 과목·단원이 없어요. <a href="#weak" style="color:var(--primary);font-weight:700">🔍 취약 체크</a> 메뉴에서 과목과 단원을 먼저 등록하면 학생별 취약 부분을 넣을 수 있어요.</p>' : ''}
         </section>
         ${noPhone ? `<p class="small" style="color:var(--warn)">⚠️ 학부모 연락처가 없는 학생이 ${noPhone}명 있어요. 이름 옆 [연락처 등록]을 눌러 추가하세요.</p>` : ''}
@@ -561,6 +569,7 @@
       const mon = opt.querySelector('[name=month]');
       if (mon) mon.onchange = () => { if (mon.value) { rep.month = mon.value; render(); } };
       opt.querySelector('[name=closing]').onchange = (e) => { rep.closing = e.target.value; lsSet('lms_report_closing', rep.closing); render(); };
+      opt.querySelectorAll('details[data-ui]').forEach((d) => d.ontoggle = () => { rep.ui[d.dataset.ui] = d.open; });
       opt.querySelectorAll('[data-week]').forEach((b) => b.onclick = () => {
         const n = Number(b.dataset.week);
         rep.weekFrom = n ? ReportText.addDays(rep.weekFrom, 7 * n) : ReportText.lastWeek().from;
@@ -973,6 +982,7 @@
     off: {},     // '학생id|항목id' → true 면 리포트에서 뺌
     weakOn: {},  // 학생id → 취약 부분 넣기 (없으면 취약 체크가 있을 때만 넣음)
     shuffle: {}, // 학생id → [다른 문구]를 누른 횟수
+    ui: { closing: false, help: false }, // 위쪽 접는 칸 열림 상태 (다시 그려도 유지)
   };
   const period = () => (rep.kind === 'weekly'
     ? { from: rep.weekFrom, to: ReportText.addDays(rep.weekFrom, 6) }

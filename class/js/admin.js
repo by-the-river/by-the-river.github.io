@@ -5,7 +5,7 @@
   const $title = document.getElementById('pageTitle');
   const { esc, nl2br } = UI;
 
-  const TITLES = { dashboard: '대시보드', homework: '숙제 관리', materials: '자료실', notices: '공지사항', scores: '성적 관리', students: '학생 관리', reports: '학부모 리포트', ask: '질문노트' };
+  const TITLES = { dashboard: '대시보드', homework: '숙제 관리', materials: '자료실', notices: '공지사항', scores: '성적 관리', students: '학생 관리', reports: '학부모 리포트', weak: '취약 체크', ask: '질문노트' };
   const byNewest = (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '');
   const studentName = (id) => Store.get('students', id)?.name || '(삭제된 학생)';
   const hasScore = (s) => s && s.score !== null && s.score !== undefined;
@@ -404,7 +404,7 @@
               <td>${s.parentPhone ? esc(UI.fmtPhone(s.parentPhone)) : '<span class="badge badge-warn">미등록</span>'}${Store.parentsOf(s.id).length ? ' <span class="badge badge-primary" title="학부모 앱 계정 있음">📱 앱</span>' : ''}</td>
               <td>${done} / ${hw.length}</td>
               <td>${lasts.length ? lasts.map(({ c, x }) => `<div>${multi ? `<span class="muted small">${esc(c)}</span> ` : ''}<b>${x.sc.score}</b> <span class="muted small">${esc(x.t.title)}</span></div>`).join('') : '<span class="muted">-</span>'}</td>
-              <td class="actions"><a class="btn btn-sm" href="#students/${s.id}/scores">📊 성적</a><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
+              <td class="actions"><a class="btn btn-sm" href="#students/${s.id}/scores">📊 성적</a><a class="btn btn-sm" href="#weak/${s.id}">🔍 취약</a><a class="btn btn-sm" href="#students/${s.id}">수정</a><button class="btn btn-sm" data-pw="${s.id}">비밀번호 변경</button><button class="btn btn-sm btn-danger" data-del-stu="${s.id}">삭제</button></td>
             </tr>`;
           }).join('') || '<tr><td colspan="8" class="empty">등록된 학생이 없습니다</td></tr>'}</tbody>
         </table></div>`;
@@ -443,38 +443,48 @@
       });
     },
 
-    /* ---------- 학부모 리포트 ---------- */
+    /* ---------- 학부모 리포트 (주간 / 월간) ---------- */
     reports() {
       const classes = Store.classes();
       if (!rep.className || (rep.className !== '전체' && !classes.includes(rep.className))) rep.className = classes[0] || '전체';
       const students = Store.studentsFor(rep.className);
       const noPhone = students.filter((s) => !s.parentPhone).length;
+      const weekly = rep.kind === 'weekly';
+      const per = period();
+      const noUnits = !Store.all('units').length;
+      const tab = (k, label) => `<button class="chip ${rep.kind === k ? 'active' : ''}" data-kind="${k}">${label}</button>`;
 
       $view.innerHTML = `
+        <div class="filter-bar">${tab('weekly', '📅 주간 리포트')}${tab('monthly', '🗓️ 월간 리포트')}</div>
         <section class="card stack" id="repOptions">
           <div class="form-grid">
             <label class="field"><span>반</span><select name="className">${classOptions(rep.className)}</select></label>
-            <label class="field"><span>시작일</span><input type="date" name="from" value="${rep.from}"></label>
-            <label class="field"><span>종료일</span><input type="date" name="to" value="${rep.to}"></label>
-            <div class="field"><span>빠른 선택</span>
-              <div class="row wrap"><button type="button" class="btn btn-sm" data-range="7">1주</button><button type="button" class="btn btn-sm" data-range="14">2주</button><button type="button" class="btn btn-sm" data-range="30">1개월</button></div>
-            </div>
-            <div class="field span-4"><span>포함 항목</span>
-              <div class="row wrap" style="gap:16px">
-                <label class="check"><input type="checkbox" name="hw" ${rep.hw ? 'checked' : ''}> 숙제 현황</label>
-                <label class="check"><input type="checkbox" name="scores" ${rep.scores ? 'checked' : ''}> 테스트 성적</label>
-                <label class="check"><input type="checkbox" name="fb" ${rep.fb ? 'checked' : ''}> 선생님 피드백</label>
+            ${weekly ? `
+            <div class="field span-2"><span>기간 (보내는 주의 전주가 기본)</span>
+              <div class="row wrap" style="gap:6px">
+                <button type="button" class="btn btn-sm" data-week="-1" title="이전 주">◀</button>
+                <b style="min-width:190px;text-align:center">${ReportText.weekLabel(per.from)} · ${md(per.from)}(월) ~ ${md(per.to)}(일)</b>
+                <button type="button" class="btn btn-sm" data-week="1" title="다음 주">▶</button>
+                ${rep.weekFrom !== ReportText.lastWeek().from ? '<button type="button" class="btn btn-sm" data-week="0">지난주로</button>' : ''}
               </div>
+            </div>` : `
+            <label class="field"><span>월</span><input type="month" name="month" value="${rep.month}"></label>
+            <div class="field"><span>기간</span><b style="padding-top:8px">${md(per.from)} ~ ${md(per.to)}</b></div>`}
+            <label class="field"><span>호칭</span><select name="honor">${['학부모님', '어머님', '아버님', '어머님, 아버님'].map((h) => `<option ${h === rep.honor ? 'selected' : ''}>${h}</option>`).join('')}</select></label>
+            <div class="field span-2"><span>포함</span>
+              <label class="check" style="padding-top:8px"><input type="checkbox" name="fb" ${rep.fb ? 'checked' : ''}> 선생님 피드백(숙제·테스트에 적은 말)도 넣기</label>
             </div>
-            <label class="field span-4"><span>마무리 문구</span><textarea name="closing" rows="2">${esc(rep.closing)}</textarea></label>
+            <label class="field span-2"><span>마무리 문구 (항상 맨 끝에 들어가요)</span><textarea name="closing" rows="2">${esc(rep.closing)}</textarea></label>
           </div>
-          <p class="muted small">💡 학부모 앱 계정이 있으면 [학부모 앱으로 보내기]로 학부모님 앱에 바로 전달되고, 읽으면 '읽음 ✓'으로 표시돼요. 또는 [복사] 후 카카오톡에 붙여넣거나, 휴대폰에서 이 화면을 열면 [문자 보내기]로 문자 앱이 바로 열립니다. 아래 문구는 보내기 전에 직접 고칠 수 있어요.</p>
+          <p class="muted small">💡 ${weekly
+            ? '주간 리포트는 지난주 테스트·숙제 중 <b>체크한 것만</b> 들어가고, 🔍 취약 체크에 적은 단원별 약점이 상담하는 말투로 정리돼요. 문장 표현은 매주 자동으로 바뀌고, [🔄 다른 문구]를 누르면 다른 표현으로 다시 만들어져요.'
+            : '월간 리포트는 그 달의 숙제 제출 여부와 테스트 성적을 정리해요.'} 아래 글은 보내기 전에 직접 고칠 수 있어요 (체크를 바꾸거나 [다른 문구]를 누르면 고친 내용은 다시 만들어져요).</p>
+          ${weekly && noUnits ? '<p class="small" style="color:var(--warn)">⚠️ 아직 과목·단원이 없어요. <a href="#weak" style="color:var(--primary);font-weight:700">🔍 취약 체크</a> 메뉴에서 과목과 단원을 먼저 등록하면 학생별 취약 부분을 넣을 수 있어요.</p>' : ''}
         </section>
         ${noPhone ? `<p class="small" style="color:var(--warn)">⚠️ 학부모 연락처가 없는 학생이 ${noPhone}명 있어요. 이름 옆 [연락처 등록]을 눌러 추가하세요.</p>` : ''}
-        <div class="sub-grid">
+        <div class="rep-grid">
           ${students.map((s) => {
-            const text = buildReport(s);
-            const last = Store.where('report_logs', (l) => l.studentId === s.id).sort(byNewest)[0];
+            const last = Store.where('report_logs', (l) => l.studentId === s.id && (!l.kind || l.kind === rep.kind)).sort(byNewest)[0];
             const hasApp = Store.parentsOf(s.id).length > 0;
             return `
             <div class="card sub-card" data-card="${s.id}">
@@ -482,13 +492,15 @@
                 <span class="who">${esc(s.name)} <span class="muted small" style="font-weight:500">${esc(Store.classLabel(s))}</span></span>
                 ${s.parentPhone ? `<span class="small">📞 ${esc(UI.fmtPhone(s.parentPhone))}</span>` : `<a class="btn btn-sm" href="#students/${s.id}">연락처 등록</a>`}
               </div>
-              <textarea class="report-text" data-text="${s.id}">${esc(text)}</textarea>
-              <div class="row between">
+              ${weekly ? pickBox(s) : ''}
+              <textarea class="report-text" rows="${weekly ? 16 : 12}" data-text="${s.id}">${esc(buildReport(s))}</textarea>
+              <div class="row between wrap">
                 <span class="muted small" data-last="${s.id}">${lastText(last)}</span>
                 <span class="row wrap">
+                  <button class="btn btn-sm" data-shuffle="${s.id}" title="같은 내용을 다른 표현으로 다시 만들어요">🔄 다른 문구</button>
                   <button class="btn btn-sm" data-copy="${s.id}">📋 복사</button>
                   <button class="btn btn-sm btn-kakao" data-kakao="${s.id}" title="${hasApp && kakaoReady() ? '카카오톡 대화방을 골라 [리포트 보기] 링크를 보내요 (리포트는 학부모 앱에 저장)' : '학부모 앱 계정이 없으면 리포트 글을 공유/복사해요'}">💛 카톡 보내기</button>
-                  ${s.parentPhone ? `<a class="btn btn-sm" data-sms="${s.id}" href="#">💬 문자 보내기</a>` : ''}
+                  ${s.parentPhone ? `<a class="btn btn-sm" data-sms="${s.id}" href="#">💬 문자</a>` : ''}
                   ${hasApp ? `<button class="btn btn-sm btn-primary" data-app="${s.id}">📱 학부모 앱으로 보내기</button>`
                     : `<a class="btn btn-sm" href="#students/${s.id}" title="학부모 앱 계정을 만들면 앱으로 바로 보낼 수 있어요">📱 앱 계정 만들기</a>`}
                 </span>
@@ -498,29 +510,46 @@
         </div>`;
 
       // 옵션 변경 → 문구 다시 만들기
+      $view.querySelectorAll('[data-kind]').forEach((b) => b.onclick = () => { rep.kind = b.dataset.kind; lsSet('lms_report_kind', rep.kind); render(); });
       const opt = document.getElementById('repOptions');
-      opt.querySelectorAll('select, input').forEach((el) => el.onchange = () => {
-        rep.className = opt.querySelector('[name=className]').value;
-        rep.from = opt.querySelector('[name=from]').value || rep.from;
-        rep.to = opt.querySelector('[name=to]').value || rep.to;
-        rep.hw = opt.querySelector('[name=hw]').checked;
-        rep.scores = opt.querySelector('[name=scores]').checked;
-        rep.fb = opt.querySelector('[name=fb]').checked;
+      opt.querySelector('[name=className]').onchange = (e) => { rep.className = e.target.value; render(); };
+      opt.querySelector('[name=honor]').onchange = (e) => { rep.honor = e.target.value; lsSet('lms_report_honor', rep.honor); render(); };
+      opt.querySelector('[name=fb]').onchange = (e) => { rep.fb = e.target.checked; render(); };
+      const mon = opt.querySelector('[name=month]');
+      if (mon) mon.onchange = () => { if (mon.value) { rep.month = mon.value; render(); } };
+      opt.querySelector('[name=closing]').onchange = (e) => { rep.closing = e.target.value; lsSet('lms_report_closing', rep.closing); render(); };
+      opt.querySelectorAll('[data-week]').forEach((b) => b.onclick = () => {
+        const n = Number(b.dataset.week);
+        rep.weekFrom = n ? ReportText.addDays(rep.weekFrom, 7 * n) : ReportText.lastWeek().from;
         render();
       });
-      opt.querySelector('[name=closing]').onchange = (e) => {
-        rep.closing = e.target.value;
-        try { localStorage.setItem('lms_report_closing', rep.closing); } catch (err) { /* 무시 */ }
-        render();
-      };
-      opt.querySelectorAll('[data-range]').forEach((b) => b.onclick = () => {
-        rep.to = UI.todayStr(); rep.from = daysAgo(Number(b.dataset.range)); render();
+
+      // 카드 안 체크 → 그 학생 글만 다시 만들기 (다른 학생 카드에서 고친 글은 그대로)
+      const redraw = (sid) => { $view.querySelector(`[data-text="${sid}"]`).value = buildReport(Store.get('students', sid)); };
+      $view.querySelectorAll('[data-pick]').forEach((cb) => cb.onchange = () => {
+        const [sid, key] = cb.dataset.pick.split('|');
+        if (key === 'weakOn') rep.weakOn[sid] = cb.checked;
+        else rep.off[sid + '|' + key] = !cb.checked;
+        redraw(sid);
+      });
+      $view.querySelectorAll('[data-shuffle]').forEach((b) => b.onclick = () => {
+        const sid = b.dataset.shuffle;
+        rep.shuffle[sid] = (rep.shuffle[sid] || 0) + 1;
+        redraw(sid);
       });
 
       const textOf = (sid) => $view.querySelector(`[data-text="${sid}"]`).value;
       const logSend = async (sid, channel, extra = {}) => {
+        const row0 = { ...extra, studentId: sid, channel, periodStart: per.from, periodEnd: per.to, content: textOf(sid), kind: rep.kind };
         try {
-          const row = await Store.insert('report_logs', { ...extra, studentId: sid, channel, periodStart: rep.from, periodEnd: rep.to, content: textOf(sid) });
+          let row;
+          try { row = await Store.insert('report_logs', row0); }
+          catch (e) {
+            // weekly-report.sql 실행 전이면 kind 칸이 없음 → 빼고 저장
+            if (!/kind/i.test(e.message || '')) throw e;
+            const { kind, ...rest } = row0;
+            row = await Store.insert('report_logs', rest);
+          }
           const el = $view.querySelector(`[data-last="${sid}"]`);
           if (el) el.textContent = lastText(row);
         } catch (e) {
@@ -530,6 +559,7 @@
           if (channel === 'app') throw e; // 앱 발송 실패는 알려야 함
         }
       };
+      const label = weekly ? `주간 학습 리포트(${ReportText.weekLabel(per.from)})` : `${Number(per.from.slice(5, 7))}월 월간 리포트`;
       $view.querySelectorAll('[data-kakao]').forEach((b) => b.onclick = async () => {
         const sid = b.dataset.kakao;
         const s = Store.get('students', sid);
@@ -542,8 +572,7 @@
           const id = crypto.randomUUID();
           // 관리자 주소가 /class/admin.html 이든 /class/admin 이든 같은 폴더의 student.html 로
           const url = new URL('student.html#reports/' + id, location.href).href;
-          const md = (d) => d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : '';
-          const msg = `[안강엽 수학] ${s.name} 학생 학습 리포트 (${md(rep.from)}~${md(rep.to)})가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
+          const msg = `[${Store.settings().academyName}] ${s.name} 학생 ${label}가 도착했어요.\n아래 [리포트 보기]를 눌러 학부모 앱에서 확인해 주세요.`;
           try {
             // 팝업이 막히지 않도록 클릭 직후 바로 띄우고, 기록은 그다음에 저장
             kakao.Share.sendDefault({
@@ -579,7 +608,7 @@
       });
       $view.querySelectorAll('[data-app]').forEach((b) => b.onclick = () => {
         const s = Store.get('students', b.dataset.app);
-        if (!confirm(`${s.name} 학생 학부모님 앱으로 이 리포트를 보낼까요?\n(보낸 뒤에는 학부모님 앱에 바로 표시돼요)`)) return;
+        if (!confirm(`${s.name} 학생 학부모님 앱으로 이 ${weekly ? '주간' : '월간'} 리포트를 보낼까요?\n(보낸 뒤에는 학부모님 앱에 바로 표시돼요)`)) return;
         UI.busy(b, async () => {
           await logSend(s.id, 'app');
           UI.toast('학부모 앱으로 보냈어요.');
@@ -596,6 +625,118 @@
         a.href = UI.smsHref(s.parentPhone, textOf(s.id)); // 클릭 순간의 (수정된) 문구로 링크 생성
         logSend(s.id, 'sms');
       });
+    },
+
+    /* ---------- 취약 체크 (과목·단원 + 학생별 취약 단원) ---------- */
+    weak(id) {
+      if (id) return weakStudent(id);
+      const subjects = Store.subjects();
+      const classes = Store.classes();
+      if (weakClass !== 'all' && !classes.includes(weakClass)) weakClass = 'all';
+      const students = weakClass === 'all' ? Store.studentsFor('전체') : Store.studentsFor(weakClass);
+      const editing = weakEdit !== null;
+      const editRows = editing && weakEdit ? Store.unitsOf(weakEdit) : [];
+      const unitText = editRows.map((u) => u.title + (u.points.length ? ': ' + u.points.join(', ') : '')).join('\n');
+      const chip = (k, label) => `<button class="chip ${weakClass === k ? 'active' : ''}" data-wclass="${esc(k)}">${esc(label)}</button>`;
+      const LV = { weak: 0, improving: 0 };
+
+      $view.innerHTML = `
+        <section class="card stack">
+          <div class="row between wrap">
+            <div class="card-title" style="margin:0">📚 과목·단원 <span class="muted small" style="font-weight:500">단원마다 '세부 유형'을 적어 두면 학생별로 콕 집어 체크할 수 있어요</span></div>
+            ${editing ? '' : '<button class="btn btn-sm btn-primary" data-unit-new>＋ 과목 추가</button>'}
+          </div>
+          ${subjects.length ? `<div class="table-wrap"><table>
+            <thead><tr><th>과목</th><th>단원</th><th>연결된 반</th><th></th></tr></thead>
+            <tbody>${subjects.map((sub) => {
+              const us = Store.unitsOf(sub);
+              const cls = Store.all('class_subjects').filter((x) => x.subject === sub).map((x) => x.className);
+              return `<tr>
+                <td><b>${esc(sub)}</b></td>
+                <td class="small">${us.length}개 <span class="muted">· ${esc(us.slice(0, 4).map((u) => u.title).join(', '))}${us.length > 4 ? ' …' : ''}</span></td>
+                <td>${cls.map((c) => `<span class="badge">${esc(c)}</span>`).join(' ') || '<span class="muted small">-</span>'}</td>
+                <td class="actions"><button class="btn btn-sm" data-unit-edit="${esc(sub)}">단원 편집</button><button class="btn btn-sm btn-danger" data-unit-del="${esc(sub)}">삭제</button></td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table></div>` : (editing ? '' : '<p class="muted small">아직 과목이 없어요. [＋ 과목 추가]를 눌러 지금 가르치는 과목과 단원을 등록하세요. 2022 개정 교육과정 기본 단원을 불러와서 고쳐 쓸 수도 있어요.</p>')}
+          ${editing ? `
+          <form id="unitForm" class="stack" style="border-top:1px solid var(--line);padding-top:14px">
+            <div class="form-grid">
+              <label class="field span-2"><span>과목 이름</span><input type="text" name="subject" required value="${esc(weakEdit)}" placeholder="예) 공통수학1, 중2-1, 수학II"></label>
+              <label class="field span-2"><span>기본 단원 불러오기 (2022 개정 · 교재에 맞게 고쳐 쓰세요)</span>
+                <select name="preset"><option value="">선택…</option>${Object.keys(UNIT_PRESETS).map((k) => `<option>${esc(k)}</option>`).join('')}</select></label>
+              <label class="field span-4"><span>단원 목록 — 한 줄에 단원 하나, <b>단원 이름: 세부 유형, 세부 유형</b></span>
+                <textarea name="units" rows="12" required placeholder="이차방정식: 근의 공식, 판별식, 근과 계수의 관계&#10;이차방정식과 이차함수: x축과의 위치 관계, 최대·최소">${esc(unitText)}</textarea></label>
+            </div>
+            <p class="muted small">이름이 같은 단원은 학생 취약 체크가 그대로 남아요. 목록에서 지운 단원은 그 단원의 취약 체크도 함께 지워져요.</p>
+            <div class="form-actions"><button type="button" class="btn" data-unit-cancel>취소</button><button class="btn btn-primary">저장</button></div>
+          </form>` : ''}
+        </section>
+
+        ${classes.length && subjects.length ? `
+        <section class="card stack">
+          <div class="card-title" style="margin:0">🔗 반별 지금 배우는 과목 <span class="muted small" style="font-weight:500">학생의 취약 체크 화면에 이 과목 단원이 먼저 나와요</span></div>
+          <div class="row wrap" style="gap:10px 18px">${classes.map((c) => `
+            <label class="row" style="gap:6px"><span class="badge">${esc(c)}</span>
+              <select class="ask-select" data-csub="${esc(c)}"><option value="">(선택 안 함)</option>${subjects.map((x) => `<option ${Store.subjectOf(c) === x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+            </label>`).join('')}</div>
+        </section>` : ''}
+
+        ${subjects.length ? `
+        ${classes.length > 1 ? `<div class="filter-bar">${chip('all', '모든 반')}${classes.map((c) => chip(c, c)).join('')}</div>` : ''}
+        <div class="table-wrap"><table>
+          <thead><tr><th>학생</th><th>반</th><th>지금 취약한 단원</th><th>최근 체크</th><th></th></tr></thead>
+          <tbody>${students.map((s) => {
+            const ws = Store.weakOf(s.id).map((w) => ({ w, u: Store.get('units', w.unitId) })).filter((x) => x.u && x.w.level in LV);
+            const lastAt = Store.weakOf(s.id).map((w) => w.updatedAt || w.createdAt).sort().pop();
+            return `<tr>
+              <td><b>${esc(s.name)}</b></td>
+              <td>${classBadges(s)}</td>
+              <td class="small">${ws.map(({ w, u }) => `<span class="badge ${w.level === 'weak' ? 'badge-danger' : 'badge-warn'}">${esc(u.title)}</span>`).join(' ') || '<span class="muted">-</span>'}</td>
+              <td class="muted small">${lastAt ? UI.fmtDate(lastAt) : '-'}</td>
+              <td class="actions"><a class="btn btn-sm btn-primary" href="#weak/${s.id}">🔍 체크하기</a></td>
+            </tr>`;
+          }).join('') || '<tr><td colspan="5" class="empty">학생이 없습니다</td></tr>'}</tbody>
+        </table></div>` : ''}`;
+
+      $view.querySelectorAll('[data-wclass]').forEach((b) => b.onclick = () => { weakClass = b.dataset.wclass; render(); });
+      $view.querySelector('[data-unit-new]')?.addEventListener('click', () => { weakEdit = ''; render(); });
+      $view.querySelectorAll('[data-unit-edit]').forEach((b) => b.onclick = () => { weakEdit = b.dataset.unitEdit; render(); });
+      $view.querySelector('[data-unit-cancel]')?.addEventListener('click', () => { weakEdit = null; render(); });
+      onClick('[data-unit-del]', async (b) => {
+        const sub = b.dataset.unitDel;
+        if (!confirm(`'${sub}' 과목과 단원 ${Store.unitsOf(sub).length}개를 삭제할까요?\n이 과목의 학생 취약 체크도 모두 지워져요.`)) return false;
+        await Store.saveUnits(sub, []);
+        for (const x of Store.all('class_subjects').filter((r) => r.subject === sub)) await Store.setClassSubject(x.className, '');
+        UI.toast('삭제했어요.');
+      });
+      $view.querySelectorAll('[data-csub]').forEach((sel) => sel.onchange = () => {
+        UI.busy(null, async () => { await Store.setClassSubject(sel.dataset.csub, sel.value); UI.toast('저장했어요.'); render(); });
+      });
+      const form = document.getElementById('unitForm');
+      if (form) {
+        form.preset.onchange = () => {
+          const p = UNIT_PRESETS[form.preset.value];
+          if (!p) return;
+          if (form.units.value.trim() && !confirm('지금 적힌 단원 목록을 기본 단원으로 바꿀까요?')) { form.preset.value = ''; return; }
+          form.units.value = p;
+          if (!form.subject.value.trim()) form.subject.value = form.preset.value;
+        };
+        onSubmit(form, async (f) => {
+          const subject = f.subject.value.trim();
+          if (!subject) throw new Error('과목 이름을 적어 주세요.');
+          if (subject !== weakEdit && Store.subjects().includes(subject)) throw new Error(`'${subject}' 과목이 이미 있어요. 그 과목의 [단원 편집]을 눌러 주세요.`);
+          const rows = parseUnits(f.units.value);
+          if (!rows.length) throw new Error('단원을 한 줄에 하나씩 적어 주세요.');
+          const old = weakEdit || subject;
+          const lost = Store.unitsOf(old).filter((u) => !rows.some((r) => r.title === u.title));
+          const lostWeak = Store.all('weak_points').filter((w) => lost.some((u) => u.id === w.unitId)).length;
+          if (lostWeak && !confirm(`목록에서 빠진 단원(${lost.map((u) => u.title).join(', ')})에 학생 취약 체크가 ${lostWeak}개 있어요. 함께 지울까요?`)) return;
+          await Store.saveUnits(subject, rows, old);
+          weakEdit = null;
+          UI.toast(`'${subject}' 단원 ${rows.length}개를 저장했어요.`);
+        }, '저장 중...');
+      }
     },
 
     /* ---------- 질문노트 (by-the-river.github.io/ask 로 들어온 질문) ---------- */
@@ -775,13 +916,24 @@
     });
   }
 
-  /* ---------- 학부모 리포트: 설정 + 문구 만들기 ---------- */
-  function daysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return Store.toLocalDate(d); }
+  /* ---------- 학부모 리포트: 설정 + 문구 만들기 (문장은 js/report-text.js) ---------- */
+  const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* 무시 */ } };
   const rep = {
-    className: '', from: daysAgo(30), to: UI.todayStr(), hw: true, scores: true, fb: true,
-    closing: (() => { try { return localStorage.getItem('lms_report_closing'); } catch (e) { return null; } })()
-      || '궁금하신 점은 언제든 연락 주세요. 감사합니다.',
+    kind: lsGet('lms_report_kind') === 'monthly' ? 'monthly' : 'weekly',
+    className: '',
+    weekFrom: ReportText.lastWeek().from,
+    month: ReportText.defaultMonth(),
+    fb: true,
+    honor: lsGet('lms_report_honor') || '학부모님',
+    closing: lsGet('lms_report_closing') || '궁금하신 점은 언제든 연락 주세요. 감사합니다.',
+    off: {},     // '학생id|항목id' → true 면 리포트에서 뺌
+    weakOn: {},  // 학생id → 취약 부분 넣기 (없으면 취약 체크가 있을 때만 넣음)
+    shuffle: {}, // 학생id → [다른 문구]를 누른 횟수
   };
+  const period = () => (rep.kind === 'weekly'
+    ? { from: rep.weekFrom, to: ReportText.addDays(rep.weekFrom, 6) }
+    : ReportText.monthRange(rep.month));
   const md = (v) => `${Number(v.slice(5, 7))}/${Number(v.slice(8, 10))}`;
   const CHANNEL = { sms: '문자', copy: '복사', app: '앱', kakao: '카톡' };
   // 카카오 JavaScript SDK (config.js 의 KAKAO_JS_KEY 가 있을 때만 사용)
@@ -794,49 +946,200 @@
   const lastText = (l) => (l
     ? `최근 발송 ${UI.fmtDateTime(l.createdAt)} (${CHANNEL[l.channel] || l.channel}${l.channel === 'app' ? (l.readAt ? ' · 읽음 ✓' : ' · 안 읽음') : ''})`
     : '발송 기록 없음');
-  const oneLine = (s) => String(s || '').replace(/\s*\n\s*/g, ' ').trim();
+  const LEVEL = { weak: '취약', improving: '보완 중', resolved: '해결' };
 
-  function buildReport(s) {
-    const L = [`[${Store.settings().academyName}] ${s.name} 학생 학습 리포트`, `기간: ${md(rep.from)} ~ ${md(rep.to)}`];
-    const inRange = (d) => d >= rep.from && d <= rep.to;
-
-    if (rep.hw) {
-      const hw = Store.where('assignments', (a) => Store.targets(a, s.classNames) && inRange(a.dueDate))
-        .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-      const done = hw.filter((a) => Store.submissionOf(a.id, s.id)).length;
-      L.push('', `■ 숙제 (${hw.length}개 중 ${done}개 제출)`);
-      if (!hw.length) L.push('- 해당 기간 숙제가 없습니다.');
-      for (const a of hw) {
-        const sub = Store.submissionOf(a.id, s.id);
-        const status = sub
-          ? (UI.isLate(a.dueDate, sub.submittedAt) ? '지각 제출' : '제출 완료')
-          : (UI.isOverdue(a.dueDate) ? '미제출' : `진행 중 (마감 ${md(a.dueDate)})`);
-        L.push(`- ${a.title}: ${status}`);
-        if (rep.fb && sub?.feedback) L.push(`  └ ${oneLine(sub.feedback)}`);
-      }
-    }
-
-    if (rep.scores) {
-      // 여러 반을 듣는 학생은 반별로 나눠서 적음
-      const multi = s.classNames.length > 1;
-      for (const c of s.classNames) {
-        const tests = Store.where('tests', (t) => t.className === c && inRange(t.date))
-          .sort((a, b) => a.date.localeCompare(b.date));
-        L.push('', multi ? `■ 테스트 성적 · ${c}` : '■ 테스트 성적');
-        if (!tests.length) L.push('- 해당 기간 테스트가 없습니다.');
-        for (const t of tests) {
-          const sc = Store.scoreOf(t.id, s.id);
-          const st = Store.testStats(t.id);
-          if (!hasScore(sc)) { L.push(`- ${t.title} (${md(t.date)}): 점수 없음`); continue; }
-          L.push(`- ${t.title} (${md(t.date)}): ${sc.score}점 / ${t.maxScore}점${st.avg !== null ? ` (반 평균 ${st.avg}점)` : ''}`);
-          if (rep.fb && sc.feedback) L.push(`  └ ${oneLine(sc.feedback)}`);
-        }
-      }
-    }
-
-    if (rep.closing.trim()) L.push('', rep.closing.trim());
-    return L.join('\n');
+  // 주간 리포트: 이 학생의 지난주 항목 + 넣을지 체크
+  function weeklyPick(s) {
+    const { from, to } = period();
+    const it = ReportText.items(s, from, to);
+    const on = (x) => !rep.off[s.id + '|' + x.id];
+    const weakOn = rep.weakOn[s.id] ?? it.weak.length > 0;
+    return { it, weakOn, pick: { tests: it.tests.filter(on), hw: it.hw.filter(on), weak: it.weak.filter(on) } };
   }
+  function pickBox(s) {
+    const { it, weakOn } = weeklyPick(s);
+    const box = (x, label) => `<label class="check pick"><input type="checkbox" data-pick="${s.id}|${x.id}" ${rep.off[s.id + '|' + x.id] ? '' : 'checked'}> ${label}</label>`;
+    const HW = { done: '제출', late: '지각', missing: '미제출', pending: '진행 중' };
+    return `
+      <div class="rep-pick">
+        <div><span class="pick-h">테스트</span>${it.tests.map((x) => box(x, `${esc(x.t.title)} <span class="muted">${hasScore(x.sc) ? x.sc.score + '점' : '미응시'}</span>`)).join('') || '<span class="muted small">지난주 테스트 없음</span>'}</div>
+        <div><span class="pick-h">숙제</span>${it.hw.map((x) => box(x, `${esc(x.a.title)} <span class="${x.state === 'missing' ? 'text-danger' : 'muted'}">${HW[x.state]}</span>`)).join('') || '<span class="muted small">지난주 숙제 없음</span>'}</div>
+        <div><span class="pick-h"><label class="check"><input type="checkbox" data-pick="${s.id}|weakOn" ${weakOn ? 'checked' : ''}> 취약</label></span>
+          ${it.weak.map((x) => box(x, `${esc(x.unit.title)} <span class="badge lv-${x.w.level}">${LEVEL[x.w.level]}</span>`)).join('') || '<span class="muted small">체크한 취약 단원 없음</span>'}
+          <a class="btn btn-sm" href="#weak/${s.id}" style="margin-left:auto">🔍 취약 체크</a></div>
+      </div>`;
+  }
+  function buildReport(s) {
+    const { from, to } = period();
+    const opt = { academy: Store.settings().academyName, honor: rep.honor, closing: rep.closing, fb: rep.fb, from, to, shuffle: rep.shuffle[s.id] || 0 };
+    if (rep.kind === 'monthly') return ReportText.monthly(s, opt);
+    const { pick, weakOn } = weeklyPick(s);
+    return ReportText.weekly(s, { ...opt, pick, weakOn });
+  }
+
+  /* ---------- 취약 체크: 학생 한 명 ---------- */
+  let weakClass = 'all';  // 학생 목록 반 필터
+  let weakEdit = null;    // 편집 중인 과목 ('' = 새 과목)
+  const weakSubj = {};    // 학생id → 보고 있는 과목
+  function parseUnits(text) {
+    const seen = new Set();
+    return String(text || '').split(/\r?\n/).map((line) => {
+      const m = line.trim().match(/^([^:：]+)(?:[:：](.*))?$/);
+      if (!m) return null;
+      const title = m[1].trim();
+      const points = [...new Set((m[2] || '').split(/[,，、]/).map((x) => x.trim()).filter(Boolean))];
+      if (!title || seen.has(title)) return null;
+      seen.add(title);
+      return { title, points };
+    }).filter(Boolean);
+  }
+  function unitRow(s, u) {
+    const w = Store.weakOf(s.id).find((x) => x.unitId === u.id);
+    const lv = w?.level || '';
+    const sel = w?.points || [];
+    const pts = [...u.points, ...sel.filter((p) => !u.points.includes(p))];
+    return `
+      <div class="unit-row lv-${lv || 'none'}" data-unit="${u.id}">
+        <div class="row between wrap">
+          <b>${esc(u.title)}</b>
+          <div class="seg">${[['', '없음'], ['weak', '취약'], ['improving', '보완 중'], ['resolved', '해결']]
+            .map(([k, l]) => `<button type="button" data-lv="${k}" class="${lv === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+        </div>
+        <div class="pt-chips">${pts.map((p) => `<button type="button" class="pt ${sel.includes(p) ? 'on' : ''}" data-pt="${esc(p)}">${esc(p)}</button>`).join('')}<button type="button" class="pt add" data-pt-add>＋ 직접 입력</button></div>
+        <textarea data-note rows="2" placeholder="무엇이 어떻게 약한지 구체적으로 적어 주세요 (리포트에 그대로 들어가요) · 예) 판별식 조건을 세울 때 등호 포함 여부를 자주 헷갈려요.">${esc(w?.note || '')}</textarea>
+        ${w ? `<div class="muted small">체크 ${UI.fmtDateTime(w.updatedAt || w.createdAt)}</div>` : ''}
+      </div>`;
+  }
+  function weakSummary(s) {
+    const ws = Store.weakOf(s.id).map((w) => ({ w, u: Store.get('units', w.unitId) })).filter((x) => x.u && x.w.level !== 'resolved');
+    return ws.length
+      ? ws.map(({ w, u }) => `<span class="badge lv-${w.level}">${esc(u.subject)} · ${esc(u.title)}${w.points.length ? ' (' + esc(w.points.join(', ')) + ')' : ''}</span>`).join(' ')
+      : '<span class="muted small">지금 취약으로 체크한 단원이 없어요</span>';
+  }
+  function weakStudent(id) {
+    const s = Store.get('students', id);
+    if (!s) { location.hash = '#weak'; return; }
+    $title.innerHTML = `<a class="crumb" href="#weak">‹ 취약 체크</a>${esc(s.name)} 취약 체크`;
+    const all = Store.subjects();
+    const used = Store.weakOf(s.id).map((w) => Store.get('units', w.unitId)?.subject).filter(Boolean);
+    const tabs = [...new Set([...Store.subjectsOfStudent(s), ...used])].filter((x) => all.includes(x));
+    let cur = weakSubj[s.id];
+    if (!cur || !all.includes(cur)) cur = tabs[0] || all[0] || '';
+    const chip = (k) => `<button class="chip ${cur === k ? 'active' : ''}" data-subj="${esc(k)}">${esc(k)}</button>`;
+    const others = all.filter((x) => !tabs.includes(x));
+    // 참고용: 최근 테스트 3개
+    const recent = Store.where('tests', (t) => s.classNames.includes(t.className) && hasScore(Store.scoreOf(t.id, s.id)))
+      .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+
+    $view.innerHTML = `
+      <section class="card stack">
+        <div class="row between wrap"><b>${esc(s.name)} <span class="muted small" style="font-weight:500">${esc(Store.classLabel(s))}</span></b>
+          <a class="btn btn-sm" href="#reports">📨 학부모 리포트로</a></div>
+        <div id="weakSum">${weakSummary(s)}</div>
+        ${recent.length ? `<div class="small muted">최근 테스트 · ${recent.map((t) => {
+          const sc = Store.scoreOf(t.id, s.id); const st = Store.testStats(t.id);
+          return `<a href="#scores/${t.id}" class="title-link">${esc(t.title)}</a> ${sc.score}/${t.maxScore}${st.avg !== null ? ` (평균 ${st.avg})` : ''}${sc.feedback ? ` – ${esc(sc.feedback)}` : ''}`;
+        }).join(' · ')}</div>` : ''}
+      </section>
+      ${!all.length ? `<div class="empty">아직 과목·단원이 없어요. <a href="#weak" style="color:var(--primary);font-weight:700">취약 체크</a> 화면에서 과목을 먼저 추가하세요.</div>` : `
+      <div class="row between wrap">
+        <div class="filter-bar">${tabs.map(chip).join('')}${tabs.includes(cur) ? '' : chip(cur)}</div>
+        ${others.length ? `<select class="ask-select" id="otherSubj"><option value="">다른 과목 보기…</option>${others.map((x) => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : ''}
+      </div>
+      ${tabs.length ? '' : '<p class="muted small">이 학생의 반에 연결된 과목이 없어요. <a href="#weak" style="color:var(--primary)">취약 체크</a> 화면의 「반별 지금 배우는 과목」에서 연결하면 바로 이 과목이 열려요.</p>'}
+      <p class="muted small">💡 단원마다 [취약 / 보완 중 / 해결]을 고르고, 약한 세부 유형을 눌러 표시하세요. 적은 내용은 바로 저장되고 주간 리포트의 「현재 취약 부분」에 상담 문장으로 들어가요. '해결'로 바꾸면 다음 리포트에 "좋아졌다"는 칭찬으로 한 번 들어가요.</p>
+      <div class="unit-list" id="unitList">${Store.unitsOf(cur).map((u) => unitRow(s, u)).join('') || '<div class="empty">이 과목에 단원이 없어요</div>'}</div>`}`;
+
+    $view.querySelectorAll('[data-subj]').forEach((b) => b.onclick = () => { weakSubj[s.id] = b.dataset.subj; render(); });
+    const other = document.getElementById('otherSubj');
+    if (other) other.onchange = () => { if (other.value) { weakSubj[s.id] = other.value; render(); } };
+    const list = document.getElementById('unitList');
+    if (!list) return;
+
+    const save = async (row, patch) => {
+      const uid = row.dataset.unit;
+      const w = Store.weakOf(s.id).find((x) => x.unitId === uid);
+      const level = patch.level !== undefined ? patch.level : (w?.level || 'weak');
+      if (!level && w && (w.note || w.points.length) && !confirm('이 단원의 취약 체크와 메모를 지울까요?')) return;
+      row.classList.add('saving');
+      try {
+        await Store.saveWeak(s.id, uid, { level, points: patch.points ?? w?.points ?? [], note: patch.note ?? w?.note ?? '' });
+      } catch (e) {
+        console.error(e); UI.toast(UI.errMsg(e), 'error');
+      }
+      const u = Store.get('units', uid);
+      row.outerHTML = unitRow(s, u);
+      document.getElementById('weakSum').innerHTML = weakSummary(s);
+    };
+    list.addEventListener('click', (e) => {
+      const row = e.target.closest('.unit-row');
+      if (!row) return;
+      const w = Store.weakOf(s.id).find((x) => x.unitId === row.dataset.unit);
+      const lvBtn = e.target.closest('[data-lv]');
+      if (lvBtn) return save(row, { level: lvBtn.dataset.lv });
+      const pt = e.target.closest('[data-pt]');
+      if (pt) {
+        const cur = w?.points || [];
+        const p = pt.dataset.pt;
+        return save(row, { points: cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p] });
+      }
+      if (e.target.closest('[data-pt-add]')) {
+        const p = (prompt('약한 세부 유형을 적어 주세요 (이 학생에게만 추가돼요)\n예) 근과 계수의 관계 활용, 그래프 해석') || '').trim();
+        if (p) save(row, { points: [...new Set([...(w?.points || []), p])] });
+      }
+    });
+    list.addEventListener('change', (e) => {
+      if (!e.target.matches('[data-note]')) return;
+      const row = e.target.closest('.unit-row');
+      const w = Store.weakOf(s.id).find((x) => x.unitId === row.dataset.unit);
+      const note = e.target.value.trim();
+      if (!w && !note) return;
+      save(row, { note });
+    });
+  }
+
+  // 2022 개정 교육과정 기본 단원 (학원 교재에 맞게 고쳐 쓰는 출발점)
+  const UNIT_PRESETS = {
+    '공통수학1': `다항식의 연산: 다항식의 덧셈과 뺄셈, 곱셈 공식, 다항식의 나눗셈, 조립제법
+나머지정리: 항등식과 미정계수, 나머지정리, 인수정리
+인수분해: 인수분해 공식, 복잡한 식의 인수분해, 인수정리를 이용한 인수분해
+복소수: 복소수의 연산, 켤레복소수, i의 거듭제곱, 음수의 제곱근
+이차방정식: 근의 공식, 판별식, 근과 계수의 관계, 이차방정식 만들기
+이차방정식과 이차함수: 그래프와 x축의 위치 관계, 이차함수와 직선의 위치 관계, 이차함수의 최대·최소
+여러 가지 방정식: 삼차·사차방정식, 삼차방정식의 근과 계수의 관계, 연립이차방정식
+여러 가지 부등식: 연립일차부등식, 절댓값이 있는 부등식, 이차부등식, 연립이차부등식
+경우의 수: 합의 법칙과 곱의 법칙, 경우의 수 세기
+순열과 조합: 순열, 조합, 순열과 조합의 활용
+행렬: 행렬의 뜻, 행렬의 덧셈·뺄셈·실수배, 행렬의 곱셈`,
+    '공통수학2': `평면좌표: 두 점 사이의 거리, 선분의 내분점, 삼각형의 무게중심
+직선의 방정식: 직선의 방정식, 두 직선의 평행과 수직, 점과 직선 사이의 거리
+원의 방정식: 원의 방정식, 원과 직선의 위치 관계, 원의 접선의 방정식
+도형의 이동: 평행이동, 대칭이동
+집합: 집합의 뜻과 포함 관계, 집합의 연산, 집합의 원소의 개수
+명제: 명제와 조건, 필요조건과 충분조건, 대우와 귀류법, 절대부등식
+함수: 함수의 뜻과 그래프, 합성함수, 역함수
+유리함수와 무리함수: 유리식, 유리함수의 그래프, 무리식, 무리함수의 그래프`,
+    '대수': `지수와 로그: 거듭제곱근, 지수의 확장, 로그의 뜻과 성질, 상용로그
+지수함수와 로그함수: 지수함수의 그래프, 로그함수의 그래프, 지수방정식·부등식, 로그방정식·부등식
+삼각함수: 일반각과 호도법, 삼각함수의 뜻, 삼각함수의 그래프, 삼각방정식·부등식
+사인법칙과 코사인법칙: 사인법칙, 코사인법칙, 삼각형의 넓이
+등차수열과 등비수열: 등차수열, 등비수열, 수열의 합
+수열의 합: 합의 기호 Σ, 여러 가지 수열의 합
+수학적 귀납법: 수열의 귀납적 정의, 수학적 귀납법`,
+    '미적분I': `함수의 극한: 함수의 수렴과 발산, 극한의 성질, 미정계수의 결정
+함수의 연속: 연속의 뜻, 연속함수의 성질, 사잇값 정리
+미분계수와 도함수: 미분계수, 미분가능성과 연속성, 도함수
+도함수의 활용: 접선의 방정식, 평균값 정리, 증가·감소와 극대·극소, 그래프 그리기, 방정식·부등식에의 활용, 속도와 가속도
+부정적분: 부정적분의 뜻, 부정적분의 계산
+정적분: 정적분의 뜻과 성질, 정적분으로 정의된 함수
+정적분의 활용: 넓이, 속도와 거리`,
+    '확률과 통계': `여러 가지 순열: 원순열, 중복순열, 같은 것이 있는 순열
+중복조합과 이항정리: 중복조합, 이항정리
+확률의 뜻과 활용: 확률의 뜻, 확률의 덧셈정리, 여사건의 확률
+조건부확률: 조건부확률, 사건의 독립과 종속, 독립시행
+확률분포: 이산확률변수, 이항분포, 정규분포
+통계적 추정: 모집단과 표본, 모평균의 추정`,
+  };
 
   /* ---------- 학생 수정 화면: 반별 성적 추이 ---------- */
   function scoreSection(s) {
@@ -893,7 +1196,7 @@
           ${classPicker(s.classNames)}
         </div>
         <p class="muted small">반에서 빼도 그 반에서 받은 점수는 지워지지 않아요. 다시 넣으면 그대로 보여요. 학생이 한 명도 없는 반은 반 목록에서 사라져요.</p>
-        <div class="form-actions"><a class="btn" href="#students">취소</a><button class="btn btn-primary">저장</button></div>
+        <div class="form-actions"><a class="btn" href="#weak/${s.id}" style="margin-right:auto">🔍 취약 체크</a><a class="btn" href="#students">취소</a><button class="btn btn-primary">저장</button></div>
       </form>
       ${scoreSection(s)}
       ${parentSection(s)}`;
@@ -1151,7 +1454,7 @@
           <tbody>${students.map((s) => {
             const sc = Store.scoreOf(t.id, s.id);
             return `<tr>
-              <td><b>${esc(s.name)}</b><div class="muted small">${esc(s.school)}</div></td>
+              <td><b>${esc(s.name)}</b><div class="muted small">${esc(s.school)}</div><a class="small" style="color:var(--primary)" href="#weak/${s.id}" title="이 학생의 단원별 취약 부분 체크">🔍 취약 체크</a></td>
               <td><input type="number" class="score-input" name="score_${s.id}" min="0" max="${t.maxScore}" step="0.5" value="${hasScore(sc) ? sc.score : ''}" placeholder="-"></td>
               <td><textarea class="fb-input" name="fb_${s.id}" rows="1" placeholder="예) 계산 실수 주의! 서술형 풀이 좋아요">${esc(sc?.feedback || '')}</textarea></td>
             </tr>`;
@@ -1162,6 +1465,14 @@
           <button class="btn btn-primary">💾 전체 저장</button>
         </div>
       </form>`;
+
+    // 저장하지 않은 점수가 있는데 취약 체크로 넘어가면 확인
+    let dirty = false;
+    const sf = document.getElementById('scoreForm');
+    sf.addEventListener('input', () => { dirty = true; });
+    sf.querySelectorAll('a[href^="#weak/"]').forEach((a) => a.onclick = (e) => {
+      if (dirty && !confirm('입력한 점수를 아직 저장하지 않았어요. 저장하지 않고 취약 체크로 갈까요?\n(먼저 [💾 전체 저장]을 누르는 걸 권해요)')) e.preventDefault();
+    });
 
     // Enter 키로 다음 학생 점수칸 이동
     const inputs = [...$view.querySelectorAll('.score-input')];

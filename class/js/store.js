@@ -17,7 +17,7 @@
     ? global.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storageKey: `lms-auth-${appName}` } })
     : null;
 
-  const TABLES = ['students', 'assignments', 'submissions', 'materials', 'notices', 'tests', 'scores', 'report_logs', 'parents', 'parent_students'];
+  const TABLES = ['students', 'assignments', 'submissions', 'materials', 'notices', 'tests', 'scores', 'report_logs', 'parents', 'parent_students', 'units', 'class_subjects', 'weak_points'];
   const PARENT_DOMAIN = cfg.PARENT_EMAIL_DOMAIN || 'parent.ankangyeop.com';
   const listeners = [];
   const pad = (n) => String(n).padStart(2, '0');
@@ -30,7 +30,7 @@
   const fromDB = (row) => mapKeys(row, toCamel);
   const toDB = (obj) => mapKeys(obj, toSnake);
 
-  const empty = () => ({ students: [], assignments: [], submissions: [], materials: [], notices: [], tests: [], scores: [], report_logs: [], parents: [], parent_students: [], stats: {} });
+  const empty = () => ({ students: [], assignments: [], submissions: [], materials: [], notices: [], tests: [], scores: [], report_logs: [], parents: [], parent_students: [], units: [], class_subjects: [], weak_points: [], stats: {} });
   let data = empty();
   let settings = { academyName: '안강엽 수학' };
   let user = null;
@@ -98,7 +98,7 @@
       ]);
       const next = empty();
       // 학부모 테이블은 parent-schema.sql 실행 전에는 없으므로 오류가 나도 빈 목록으로
-      const OPTIONAL = ['parents', 'parent_students'];
+      const OPTIONAL = ['parents', 'parent_students', 'units', 'class_subjects', 'weak_points'];
       TABLES.forEach((t, i) => {
         if (results[i].error && OPTIONAL.includes(t)) { console.warn(t, results[i].error.message); next[t] = []; return; }
         next[t] = check(results[i]).map(fromDB);
@@ -239,7 +239,70 @@
       for (const t of ['assignments', 'materials', 'notices', 'tests']) {
         check(await sb.from(t).update({ class_name: newName, updated_at: now }).eq('class_name', oldName));
       }
+      // 반 ↔ 과목 연결도 옮김 (새 이름에 이미 과목이 있으면 그쪽을 유지)
+      const cs = data.class_subjects.find((x) => x.className === oldName);
+      if (cs) {
+        const res = data.class_subjects.some((x) => x.className === newName)
+          ? await sb.from('class_subjects').delete().eq('id', cs.id)
+          : await sb.from('class_subjects').update({ class_name: newName, updated_at: now }).eq('id', cs.id);
+        if (res.error) console.warn(res.error);
+      }
       await this.load();
+    },
+
+    /* ---------- 과목·단원 / 취약 체크 (supabase/weekly-report.sql) ---------- */
+    subjects() {
+      const seen = [];
+      data.units.slice().sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.seq - b.seq)
+        .forEach((u) => { if (!seen.includes(u.subject)) seen.push(u.subject); });
+      return seen;
+    },
+    unitsOf(subject) { return data.units.filter((u) => u.subject === subject).sort((a, b) => a.seq - b.seq); },
+    subjectOf(className) { return data.class_subjects.find((x) => x.className === className)?.subject || ''; },
+    // 학생이 지금 배우는 과목들 (반에 연결된 과목)
+    subjectsOfStudent(s) { return [...new Set((s?.classNames || []).map((c) => this.subjectOf(c)).filter(Boolean))]; },
+    weakOf(studentId) { return data.weak_points.filter((w) => w.studentId === studentId); },
+    async setClassSubject(className, subject) {
+      const cur = data.class_subjects.find((x) => x.className === className);
+      if (!subject) { if (cur) check(await sb.from('class_subjects').delete().eq('id', cur.id)); }
+      else check(await sb.from('class_subjects').upsert({ class_name: className, subject, updated_at: this.nowISO() }, { onConflict: 'class_name' }));
+      await this.load();
+    },
+    // 과목의 단원 목록을 한 번에 저장 (rows: [{title, points[]}] 순서대로)
+    // 이름이 같은 단원은 그대로 두고(취약 체크 유지) 순서·세부 유형만 고침, 목록에서 빠진 단원은 삭제
+    async saveUnits(subject, rows, oldSubject = subject) {
+      const cur = this.unitsOf(oldSubject);
+      const now = this.nowISO();
+      const keep = new Set();
+      for (const [i, r] of rows.entries()) {
+        const hit = cur.find((u) => u.title === r.title && !keep.has(u.id));
+        if (hit) {
+          keep.add(hit.id);
+          check(await sb.from('units').update({ subject, seq: i, points: r.points, updated_at: now }).eq('id', hit.id));
+        } else {
+          check(await sb.from('units').insert({ subject, seq: i, title: r.title, points: r.points }));
+        }
+      }
+      const gone = cur.filter((u) => !keep.has(u.id)).map((u) => u.id);
+      if (gone.length) check(await sb.from('units').delete().in('id', gone));
+      if (oldSubject !== subject) {
+        check(await sb.from('class_subjects').update({ subject, updated_at: now }).eq('subject', oldSubject));
+      }
+      await this.load();
+    },
+    // 취약 체크 저장 (level 이 없으면 삭제). 화면이 끊기지 않게 전체를 다시 불러오지 않고 이 줄만 고침
+    async saveWeak(studentId, unitId, patch) {
+      const cur = data.weak_points.find((w) => w.studentId === studentId && w.unitId === unitId);
+      if (!patch.level) {
+        if (cur) { check(await sb.from('weak_points').delete().eq('id', cur.id)); data.weak_points = data.weak_points.filter((w) => w !== cur); }
+        return null;
+      }
+      const next = { level: patch.level, points: patch.points ?? cur?.points ?? [], note: patch.note ?? cur?.note ?? '' };
+      const row = fromDB(check(await sb.from('weak_points')
+        .upsert({ student_id: studentId, unit_id: unitId, ...next, updated_at: this.nowISO() }, { onConflict: 'student_id,unit_id' })
+        .select().single()));
+      data.weak_points = data.weak_points.filter((w) => w.id !== row.id && w !== cur).concat(row);
+      return row;
     },
 
     async setStudentPassword(id, password) {
@@ -311,6 +374,7 @@
     [/Failed to fetch|NetworkError/i, '인터넷 연결을 확인해주세요.'],
     [/row-level security|permission denied/i, '권한이 없어요.'],
     [/class_names|my_classes/i, '여러 반 기능용 DB 설정(supabase/multi-class-schema.sql)을 먼저 실행해주세요.'],
+    [/units|weak_points|class_subjects|column .*kind/i, '주간 리포트·취약 체크용 DB 설정(supabase/weekly-report.sql)을 먼저 실행해주세요.'],
     [/relation .*parent|parent_students|admin_set_parent_password|admin_delete_parent|report_logs_channel_check|Could not find the table/i, '학부모 기능용 DB 설정(supabase/parent-schema.sql)을 먼저 실행해주세요.'],
     [/Payload too large|exceeded the maximum/i, '파일이 너무 커요. (최대 50MB)'],
   ];

@@ -131,3 +131,40 @@ td .title-link:hover { color: var(--primary); }
 .chart svg { width: 100%; height: auto; display: block; max-height: 260px; }
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); }
 .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+
+/* ---------- 학부모 리포트 (주간·월간) ---------- */
+.rep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; }
+.rep-grid .report-text { font-size: 14px; line-height: 1.6; }
+.rep-pick { display: flex; flex-direction: column; gap: 6px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.rep-pick > div { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.rep-pick .pick-h { font-weight: 700; color: var(--muted); min-width: 52px; font-size: 12px; }
+.rep-pick .check { font-size: 13px; }
+.text-danger { color: var(--danger); }
+.badge.lv-weak { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
+.badge.lv-improving { background: var(--warn-weak); color: var(--warn); border-color: transparent; }
+.badge.lv-resolved { background: var(--success-weak); color: var(--success); border-color: transparent; }
+@media (max-width: 520px) { .rep-grid { grid-template-columns: 1fr; } }
+
+/* ---------- 취약 체크 ---------- */
+.unit-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
+.unit-row { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow); transition: opacity .15s; }
+.unit-row.lv-weak { border-left-color: var(--danger); }
+.unit-row.lv-improving { border-left-color: var(--warn); }
+.unit-row.lv-resolved { border-left-color: var(--success); }
+.unit-row.saving { opacity: .55; pointer-events: none; }
+.unit-row textarea { min-height: 44px; font-size: 13px; }
+.unit-row.lv-none textarea { opacity: .7; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 4px 10px; font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { color: #fff; background: var(--text); }
+.lv-weak .seg button.on { background: var(--danger); }
+.lv-improving .seg button.on { background: var(--warn); }
+.lv-resolved .seg button.on { background: var(--success); }
+.pt-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pt { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; color: var(--text); }
+.pt.on { background: var(--danger-weak); color: var(--danger); border-color: var(--danger); font-weight: 700; }
+.lv-improving .pt.on { background: var(--warn-weak); color: var(--warn); border-color: var(--warn); }
+.lv-resolved .pt.on { background: var(--success-weak); color: var(--success); border-color: var(--success); }
+.pt.add { border-style: dashed; color: var(--muted); background: transparent; }
+@media (max-width: 520px) { .unit-list { grid-template-columns: 1fr; } }

@@ -762,8 +762,16 @@
    * ============================================================ */
   const myReports = () => Store.where('report_logs', (r) => r.studentId === me.id && r.channel === 'app')
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const reportTitle = (r) => (r.periodStart && r.periodEnd
-    ? `${UI.fmtDate(r.periodStart)} ~ ${UI.fmtDate(r.periodEnd)} 리포트` : '학습 리포트');
+  // 주간: 11월 3주차 주간 리포트 (그 주 목요일이 속한 달 기준) · 월간: 11월 월간 리포트
+  const weekLabelOf = (from) => {
+    const d = new Date(from + 'T00:00:00'); d.setDate(d.getDate() + 3);
+    return `${d.getMonth() + 1}월 ${Math.ceil(d.getDate() / 7)}주차`;
+  };
+  const reportTitle = (r) => {
+    if (r.kind === 'weekly' && r.periodStart) return `${weekLabelOf(r.periodStart)} 주간 리포트`;
+    if (r.kind === 'monthly' && r.periodStart) return `${Number(r.periodStart.slice(5, 7))}월 월간 리포트`;
+    return r.periodStart && r.periodEnd ? `${UI.fmtDate(r.periodStart)} ~ ${UI.fmtDate(r.periodEnd)} 리포트` : '학습 리포트';
+  };
 
   function parentHwStatus(a) {
     const s = mySub(a.id);

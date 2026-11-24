@@ -1232,19 +1232,20 @@
           ${graded.length ? `<div class="chart">${UI.scoreChart(graded)}</div>
           <div class="legend"><span><i style="background:#4353e8"></i>${esc(s.name)} 점수</span><span><i style="background:#b8bdc9"></i>반 평균</span></div>` : ''}
           <div class="table-wrap"><table>
-            <thead><tr><th>시험일</th><th>테스트</th><th>점수</th><th>반 평균</th><th>피드백</th></tr></thead>
+            <thead><tr><th>시험일</th><th>테스트</th><th>점수</th><th>반 평균</th><th>피드백</th><th>취약 파트 <span class="muted" style="font-weight:500" title="시험 범위 단원 중 지금 취약 체크된 것">(범위 중)</span></th></tr></thead>
             <tbody>${rows.slice().reverse().map(({ t, s: sc, st }) => `<tr>
               <td class="muted">${UI.fmtDate(t.date)}</td>
-              <td><a class="title-link" href="#scores/${t.id}">${esc(t.title)}</a></td>
+              <td><a class="title-link" href="#scores/${t.id}">${esc(t.title)}</a>${t.unitIds.length ? `<div class="muted small">범위 · ${esc(Store.testUnits(t).map((u) => u.title).join(", "))}</div>` : ""}</td>
               <td>${hasScore(sc) ? `<b>${sc.score}</b> <span class="muted small">/ ${t.maxScore}</span>` : '<span class="muted">-</span>'}</td>
               <td class="muted">${st.avg ?? '-'}</td>
               <td class="small ellipsis" style="max-width:280px">${esc(sc?.feedback || '')}</td>
+              <td class="small">${t.unitIds.length ? (UI.weakBadges(Store.weakInTest(t, s.id)) || `<a class="muted" href="#weak/${s.id}/${t.id}">체크 없음</a>`) : `<span class="muted">-</span>`}</td>
             </tr>`).join('')}</tbody>
           </table></div>
         </div>`;
     }).filter(Boolean);
     return `
-      <section class="card stack" style="max-width:720px" id="scoreBox">
+      <section class="card stack" style="max-width:960px" id="scoreBox">
         <div class="card-title">📊 성적 추이 <span class="muted small" style="font-weight:500">반별로 따로 보여요 · 테스트 이름을 누르면 성적 입력 화면으로 가요</span></div>
         ${blocks.join('<hr style="border:0;border-top:1px solid var(--line);margin:6px 0">') || '<p class="muted small">아직 테스트 기록이 없어요.</p>'}
       </section>`;

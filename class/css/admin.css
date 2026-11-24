@@ -140,9 +140,6 @@ td .title-link:hover { color: var(--primary); }
 .rep-pick .pick-h { font-weight: 700; color: var(--muted); min-width: 52px; font-size: 12px; }
 .rep-pick .check { font-size: 13px; }
 .text-danger { color: var(--danger); }
-.badge.lv-weak { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
-.badge.lv-improving { background: var(--warn-weak); color: var(--warn); border-color: transparent; }
-.badge.lv-resolved { background: var(--success-weak); color: var(--success); border-color: transparent; }
 @media (max-width: 520px) { .rep-grid { grid-template-columns: 1fr; } }
 
 /* ---------- 취약 체크 ---------- */

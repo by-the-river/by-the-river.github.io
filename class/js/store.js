@@ -271,6 +271,12 @@
       return data.units.filter((u) => ids.includes(u.id)).sort((a, b) => a.subject.localeCompare(b.subject) || a.seq - b.seq);
     },
     weakOf(studentId) { return data.weak_points.filter((w) => w.studentId === studentId); },
+    // 이 테스트 범위 단원 중 학생이 체크된 단원 (지금 상태 기준: 취약 → 보완 중 → 해결)
+    weakInTest(t, studentId) {
+      const order = { weak: 0, improving: 1, resolved: 2 };
+      return this.testUnits(t).map((u) => ({ u, w: data.weak_points.find((w) => w.studentId === studentId && w.unitId === u.id) }))
+        .filter((x) => x.w).sort((a, b) => order[a.w.level] - order[b.w.level]);
+    },
     async setClassSubject(className, subject) {
       const cur = data.class_subjects.find((x) => x.className === className);
       if (!subject) { if (cur) check(await sb.from('class_subjects').delete().eq('id', cur.id)); }
@@ -394,6 +400,11 @@
       return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     },
     nl2br(s) { return UI.esc(s).replace(/\n/g, '<br>'); },
+    // 취약 파트 배지: [{u, w}] → "이차방정식 · 판별식" (취약/보완 중/해결 색)
+    weakBadges(list) {
+      const LV = { weak: "취약", improving: "보완 중", resolved: "해결" };
+      return (list || []).map(({ u, w }) => `<span class="badge lv-${w.level}" title="${LV[w.level]}${w.note ? " · " + UI.esc(w.note) : ""}">${UI.esc(u.title)}${w.points.length ? " · " + UI.esc(w.points.join(", ")) : ""}${w.level === "weak" ? "" : " (" + LV[w.level] + ")"}</span>`).join(" ");
+    },
     fmtDate(v) {
       if (!v) return '';
       const d = parseDate(v);

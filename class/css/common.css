@@ -153,3 +153,10 @@ input[type=file] { font: inherit; width: 100%; }
   text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 6px #fff;
 }
 .marks-off .mark-svg, .marks-off .mark-note { display: none; }
+
+/* 단원 취약 체크 표시 (관리자·학부모 공용) */
+.badge.lv-weak { background: var(--danger-weak); color: var(--danger); border-color: transparent; }
+.badge.lv-improving { background: var(--warn-weak); color: var(--warn); border-color: transparent; }
+.badge.lv-resolved { background: var(--success-weak); color: var(--success); border-color: transparent; }
+.weak-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.weak-item + .weak-item { border-top: 1px solid var(--line); padding-top: 10px; }

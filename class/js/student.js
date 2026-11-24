@@ -274,7 +274,8 @@
             <a class="list-item" href="#scores/${t.id}">
               <div class="grow">
                 <div class="title ellipsis">${esc(t.title)}</div>
-                <div class="sub">${UI.fmtDate(t.date)}${st.avg !== null ? ` · 반 평균 ${st.avg}` : ''}</div>
+                <div class="sub">${UI.fmtDate(t.date)}${st.avg !== null ? ` · 반 평균 ${st.avg}` : ''}${t.unitIds.length ? ` · 범위: ${esc(Store.testUnits(t).map((u) => u.title).join(', '))}` : ''}</div>
+                ${parent && Store.weakInTest(t, me.id).length ? `<div class="weak-badges" style="margin-top:4px">${UI.weakBadges(Store.weakInTest(t, me.id))}</div>` : ''}
               </div>
               ${hasScore(s)
                 ? `<div class="score-pill">${s.score}<span class="muted small"> / ${t.maxScore}</span></div>`
@@ -431,6 +432,7 @@
         <div>
           <p class="muted small">${UI.fmtDate(t.date)} · ${esc(t.className)}</p>
           <h2 style="font-size:19px;font-weight:800;margin-top:4px">${esc(t.title)}</h2>
+          ${t.unitIds.length && Store.testUnits(t).length ? `<p class="muted small" style="margin-top:4px">시험 범위 · ${esc(Store.testUnits(t).map((u) => u.title).join(', '))}</p>` : ''}
         </div>
         <div class="score-big">${has ? s.score : '-'}<small> / ${t.maxScore}점</small></div>
         <div class="stat-grid">
@@ -442,6 +444,22 @@
       <section class="card">
         <div class="card-title">선생님 피드백</div>
         ${s && s.feedback ? `<div class="feedback-box">${nl2br(s.feedback)}</div>` : '<p class="muted small">아직 피드백이 없어요.</p>'}
+      </section>
+      ${parent ? weakCard(t) : ''}`;
+  }
+  // 학부모: 이 시험 범위에서 선생님이 체크한 취약 파트 (지금 상태)
+  function weakCard(t) {
+    const list = Store.weakInTest(t, me.id);
+    if (!t.unitIds.length || !Store.testUnits(t).length) return '';
+    const LV = { weak: '취약', improving: '보완 중', resolved: '해결' };
+    return `
+      <section class="card stack">
+        <div class="card-title">취약 파트 <span class="muted small" style="font-weight:500">이 시험 범위 중 선생님이 체크한 부분</span></div>
+        ${list.length ? list.map(({ u, w }) => `
+          <div class="weak-item">
+            <div class="row" style="gap:6px;flex-wrap:wrap"><span class="badge lv-${w.level}">${LV[w.level]}</span><b>${esc(u.title)}</b>${w.points.length ? `<span class="muted small">${esc(w.points.join(', '))}</span>` : ''}</div>
+            ${w.note ? `<p class="small" style="margin:4px 0 0">${esc(w.note)}</p>` : ''}
+          </div>`).join('') : '<p class="muted small">이 시험 범위에서 따로 약하다고 체크된 부분이 없어요.</p>'}
       </section>`;
   }
 

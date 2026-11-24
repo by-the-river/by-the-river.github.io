@@ -314,6 +314,7 @@
               <label class="field"><span>시험일</span><input type="date" name="date" required value="${UI.todayStr()}"></label>
               <label class="field"><span>만점</span><input type="number" name="maxScore" value="100" min="1" required></label>
             </div>
+            ${Store.subjects().length ? '<div class="field" id="newRange"></div>' : ''}
             <div class="form-actions"><button class="btn btn-primary">만들고 성적 입력하기</button></div>
           </form>
         </details>
@@ -338,10 +339,52 @@
       $view.querySelectorAll('[data-sclass]').forEach((b) => b.onclick = () => { scoreClass = b.dataset.sclass; render(); });
       const form = document.getElementById('testForm');
       if (scoreClass !== 'all') form.className.value = scoreClass;
+
+      // 시험 범위 (선택): 응시 반에 연결된 과목 단원이 먼저 나옴
+      const rangeEl = document.getElementById('newRange');
+      const newSel = new Set();
+      let newSubj = '';
+      let subjTouched = false;
+      const drawNewRange = () => {
+        if (!rangeEl) return;
+        const all = Store.subjects();
+        if (!subjTouched) newSubj = Store.subjectOf(form.className.value) || newSubj || all[0];
+        const picked = Store.all('units').filter((u) => newSel.has(u.id))
+          .sort((a, b) => a.subject.localeCompare(b.subject) || a.seq - b.seq);
+        rangeEl.innerHTML = `
+          <span>시험 범위 (선택 · 나중에 성적 입력 화면에서 바꿀 수 있어요)</span>
+          <div class="rep-pick">
+            <div><span class="pick-h">과목</span>
+              <select class="ask-select" data-new-subj>${all.map((x) => `<option ${x === newSubj ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+              <span class="muted small">${picked.length ? `고른 단원: ${esc(picked.map((u) => u.title).join(', '))}` : '단원을 고르지 않으면 범위 없이 만들어져요'}</span></div>
+            <div>${Store.unitsOf(newSubj).map((u) => `
+              <label class="check"><input type="checkbox" data-new-unit="${u.id}" ${newSel.has(u.id) ? 'checked' : ''}> ${esc(u.title)}</label>`).join('') || '<span class="muted small">이 과목에 단원이 없어요</span>'}</div>
+          </div>`;
+        rangeEl.querySelector('[data-new-subj]').onchange = (e) => { newSubj = e.target.value; subjTouched = true; drawNewRange(); };
+        rangeEl.querySelectorAll('[data-new-unit]').forEach((cb) => cb.onchange = () => {
+          if (cb.checked) newSel.add(cb.dataset.newUnit); else newSel.delete(cb.dataset.newUnit);
+          drawNewRange();
+        });
+      };
+      // 반을 바꾸면 그 반 과목으로 (직접 과목을 고른 뒤에는 그대로)
+      form.className.addEventListener('change', () => {
+        const subj = Store.subjectOf(form.className.value);
+        if (subj && !subjTouched) {
+          // 다른 과목 반으로 바꾸면 앞 반 과목에서 고른 단원은 뺌
+          Store.all('units').forEach((u) => { if (u.subject !== subj) newSel.delete(u.id); });
+        }
+        drawNewRange();
+      });
+      drawNewRange();
+
       form.onsubmit = (e) => {
         e.preventDefault();
         UI.busy(e.submitter, async () => {
-          const t = await Store.insert('tests', { title: form.title.value.trim(), className: form.className.value, date: form.date.value, maxScore: Number(form.maxScore.value) });
+          const row = { title: form.title.value.trim(), className: form.className.value, date: form.date.value, maxScore: Number(form.maxScore.value) };
+          const unitIds = Store.all('units').filter((u) => newSel.has(u.id))
+            .sort((a, b) => a.subject.localeCompare(b.subject) || a.seq - b.seq).map((u) => u.id);
+          if (unitIds.length) row.unitIds = unitIds;
+          const t = await Store.insert('tests', row);
           location.hash = '#scores/' + t.id;
         }, '만드는 중...');
       };

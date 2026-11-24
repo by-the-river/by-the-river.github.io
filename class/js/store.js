@@ -107,6 +107,10 @@
       next.students.forEach((s) => {
         s.classNames = Array.isArray(s.classNames) && s.classNames.length ? s.classNames : (s.className ? [s.className] : []);
       });
+      // 테스트 시험 범위 (test-units.sql 실행 전이면 칸이 없음 → 빈 목록)
+      next.tests.forEach((t) => {
+        t.unitIds = Array.isArray(t.unitIds) ? t.unitIds : [];
+      });
       for (const r of check(results[TABLES.length]) || []) {
         next.stats[r.test_id] = { count: r.count, avg: r.avg === null ? null : Number(r.avg), max: r.max === null ? null : Number(r.max), min: r.min === null ? null : Number(r.min) };
       }
@@ -261,6 +265,11 @@
     subjectOf(className) { return data.class_subjects.find((x) => x.className === className)?.subject || ''; },
     // 학생이 지금 배우는 과목들 (반에 연결된 과목)
     subjectsOfStudent(s) { return [...new Set((s?.classNames || []).map((c) => this.subjectOf(c)).filter(Boolean))]; },
+    // 테스트의 시험 범위 단원 (과목·단원 순서대로)
+    testUnits(t) {
+      const ids = t?.unitIds || [];
+      return data.units.filter((u) => ids.includes(u.id)).sort((a, b) => a.subject.localeCompare(b.subject) || a.seq - b.seq);
+    },
     weakOf(studentId) { return data.weak_points.filter((w) => w.studentId === studentId); },
     async setClassSubject(className, subject) {
       const cur = data.class_subjects.find((x) => x.className === className);
@@ -374,6 +383,7 @@
     [/Failed to fetch|NetworkError/i, '인터넷 연결을 확인해주세요.'],
     [/row-level security|permission denied/i, '권한이 없어요.'],
     [/class_names|my_classes/i, '여러 반 기능용 DB 설정(supabase/multi-class-schema.sql)을 먼저 실행해주세요.'],
+    [/unit_ids/i, '시험 범위용 DB 설정(supabase/test-units.sql)을 먼저 실행해주세요.'],
     [/units|weak_points|class_subjects|column .*kind/i, '주간 리포트·취약 체크용 DB 설정(supabase/weekly-report.sql)을 먼저 실행해주세요.'],
     [/relation .*parent|parent_students|admin_set_parent_password|admin_delete_parent|report_logs_channel_check|Could not find the table/i, '학부모 기능용 DB 설정(supabase/parent-schema.sql)을 먼저 실행해주세요.'],
     [/Payload too large|exceeded the maximum/i, '파일이 너무 커요. (최대 50MB)'],

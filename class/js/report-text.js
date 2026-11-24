@@ -33,6 +33,8 @@
   const oneLine = (s) => String(s || '').replace(/\s*\n\s*/g, ' ').trim();
   const endDot = (s) => { const t = oneLine(s); return !t || /[.!?…。~요다]$/.test(t) ? t : t + '.'; };
   const hasScore = (s) => s && s.score !== null && s.score !== undefined;
+  // 테스트 시험 범위 단원 이름 (없으면 빈 글자)
+  const range = (t) => Store.testUnits(t).map((u) => u.title).join(", ");
   const r1 = (x) => Math.round(x * 10) / 10;
 
   // 문자열 해시 (문장 자리마다 시작점을 다르게)
@@ -317,6 +319,7 @@
       tests.forEach((x, i) => {
         const p = scoreParts(x, N, P, i === tests.length - 1);
         L.push(p.line);
+        if (range(x.t)) L.push(`  · 범위: ${range(x.t)}`);
         if (opt.fb && p.feedback) L.push(`  └ ${p.feedback}`);
         if (p.talk) talks.push(p.talk);
       });
@@ -379,8 +382,9 @@
       if (!rows.length) L.push('- 이번 달 테스트가 없습니다.');
       for (const x of rows) {
         const max = Number(x.t.maxScore) || 100;
-        if (!hasScore(x.sc)) { L.push(`- ${x.t.title} (${md(x.t.date)}): 미응시`); continue; }
+        if (!hasScore(x.sc)) { L.push(`- ${x.t.title} (${md(x.t.date)}): 미응시`); if (range(x.t)) L.push(`  · 범위: ${range(x.t)}`); continue; }
         L.push(`- ${x.t.title} (${md(x.t.date)}): ${x.sc.score}점 / ${max}점${x.st.avg !== null ? ` · 반 평균 ${x.st.avg}점` : ''}`);
+        if (range(x.t)) L.push(`  · 범위: ${range(x.t)}`);
         if (opt.fb && x.sc.feedback) L.push(`  └ ${oneLine(x.sc.feedback)}`);
         myPcts.push((x.sc.score / max) * 100);
         if (x.st.avg !== null) avgPcts.push((x.st.avg / max) * 100);

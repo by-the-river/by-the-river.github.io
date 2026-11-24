@@ -324,7 +324,7 @@
             const st = Store.testStats(t.id);
             const total = Store.studentsFor(t.className).length;
             return `<tr>
-              <td><a class="title-link" href="#scores/${t.id}">${esc(t.title)}</a></td>
+              <td><a class="title-link" href="#scores/${t.id}">${esc(t.title)}</a>${t.unitIds.length ? `<div class="muted small">범위 · ${esc(Store.testUnits(t).map((u) => u.title).join(", "))}</div>` : ""}</td>
               <td><span class="badge">${esc(t.className)}</span></td>
               <td class="muted">${UI.fmtDate(t.date)}</td>
               <td>${st.count} / ${total} ${st.count < total ? '<span class="badge badge-warn">미입력</span>' : '<span class="badge badge-success">완료</span>'}</td>
@@ -1030,6 +1030,26 @@
     // 참고용: 최근 테스트 3개
     const recent = Store.where('tests', (t) => s.classNames.includes(t.className) && hasScore(Store.scoreOf(t.id, s.id)))
       .sort((a, b) => b.date.localeCompare(a.date)).slice(0, 3);
+    // 시험 범위: #weak/<학생>/<테스트> 로 들어오면 그 테스트, 아니면 범위가 있는 가장 최근 테스트
+    const rangeTests = Store.where('tests', (t) => s.classNames.includes(t.className) && t.unitIds.length)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const askedT = Store.get('tests', location.hash.slice(1).split('/')[2]);
+    const rt = askedT && askedT.unitIds.length ? askedT : rangeTests[0] || null;
+    const rangeUnits = rt ? Store.testUnits(rt) : [];
+    const rangeIds = new Set(rangeUnits.map((u) => u.id));
+    const restUnits = Store.unitsOf(cur).filter((u) => !rangeIds.has(u.id));
+    const rtScore = rt && Store.scoreOf(rt.id, s.id);
+    const rangeSection = rt ? `
+      <section class="card stack range-card">
+        <div class="row between wrap">
+          <b>📝 시험 범위 · ${esc(rt.title)} <span class="muted small" style="font-weight:500">${UI.fmtDate(rt.date)}${hasScore(rtScore) ? ` · ${rtScore.score}/${rt.maxScore}점` : ' · 미응시'}${rtScore?.feedback ? ` · ${esc(rtScore.feedback)}` : ''}</span></b>
+          ${rangeTests.length > 1 || (askedT && !askedT.unitIds.length) ? `<select class="ask-select" id="rangeTest">${rangeTests.map((t) => `<option value="${t.id}" ${t.id === rt.id ? 'selected' : ''}>${esc(t.title)} (${UI.fmtDate(t.date)})</option>`).join('')}</select>` : ''}
+        </div>
+        <p class="muted small" style="margin:0">이번 시험에 나온 단원이에요. 답안을 보면서 약한 단원을 먼저 체크하세요.</p>
+        <div class="unit-list">${rangeUnits.map((u) => unitRow(s, u)).join('')}</div>
+      </section>` : '';
+    const noRangeHint = askedT && !askedT.unitIds.length
+      ? `<p class="small" style="color:var(--warn)">⚠️ '${esc(askedT.title)}'에는 시험 범위가 아직 없어요. <a href="#scores/${askedT.id}" style="color:var(--primary);font-weight:700">성적 입력 화면</a>에서 [범위 지정]을 누르면 이 화면 맨 위에 범위 단원이 나와요.</p>` : '';
 
     $view.innerHTML = `
       <section class="card stack">
@@ -1042,15 +1062,21 @@
         }).join(' · ')}</div>` : ''}
       </section>
       ${!all.length ? `<div class="empty">아직 과목·단원이 없어요. <a href="#weak" style="color:var(--primary);font-weight:700">취약 체크</a> 화면에서 과목을 먼저 추가하세요.</div>` : `
+      <div id="unitList" class="stack">
+      ${noRangeHint}
+      ${rangeSection}
       <div class="row between wrap">
         <div class="filter-bar">${tabs.map(chip).join('')}${tabs.includes(cur) ? '' : chip(cur)}</div>
         ${others.length ? `<select class="ask-select" id="otherSubj"><option value="">다른 과목 보기…</option>${others.map((x) => `<option ${x === cur ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : ''}
       </div>
       ${tabs.length ? '' : '<p class="muted small">이 학생의 반에 연결된 과목이 없어요. <a href="#weak" style="color:var(--primary)">취약 체크</a> 화면의 「반별 지금 배우는 과목」에서 연결하면 바로 이 과목이 열려요.</p>'}
       <p class="muted small">💡 단원마다 [취약 / 보완 중 / 해결]을 고르고, 약한 세부 유형을 눌러 표시하세요. 적은 내용은 바로 저장되고 주간 리포트의 「현재 취약 부분」에 상담 문장으로 들어가요. '해결'로 바꾸면 다음 리포트에 "좋아졌다"는 칭찬으로 한 번 들어가요.</p>
-      <div class="unit-list" id="unitList">${Store.unitsOf(cur).map((u) => unitRow(s, u)).join('') || '<div class="empty">이 과목에 단원이 없어요</div>'}</div>`}`;
+      <div class="unit-list">${restUnits.map((u) => unitRow(s, u)).join('') || `<div class="empty">${rangeUnits.length ? '이 과목의 나머지 단원이 없어요' : '이 과목에 단원이 없어요'}</div>`}</div>
+      </div>`}`;
 
     $view.querySelectorAll('[data-subj]').forEach((b) => b.onclick = () => { weakSubj[s.id] = b.dataset.subj; render(); });
+    const rtSel = document.getElementById('rangeTest');
+    if (rtSel) rtSel.onchange = () => { location.hash = `#weak/${s.id}/${rtSel.value}`; };
     const other = document.getElementById('otherSubj');
     if (other) other.onchange = () => { if (other.value) { weakSubj[s.id] = other.value; render(); } };
     const list = document.getElementById('unitList');
@@ -1431,6 +1457,67 @@
 
   /* ---------- 성적 + 피드백 입력 ---------- */
   let scoreClass = 'all'; // 성적 관리 목록의 반 필터
+  /* ---------- 성적 입력 화면: 시험 범위 단원 ---------- */
+  // 점수 입력 중일 수 있으므로 이 칸만 다시 그림 (화면 전체를 다시 그리지 않음)
+  function bindRange(t) {
+    const box = document.getElementById('rangeBox');
+    if (!box) return;
+    const all = Store.subjects();
+    let editing = false;
+    let sel = new Set(t.unitIds);
+    let subj = Store.testUnits(t)[0]?.subject || Store.subjectOf(t.className) || all[0] || '';
+
+    const chips = (units) => units.map((u) => `<span class="badge badge-primary">${esc(u.title)}</span>`).join(' ');
+    const draw = () => {
+      const cur = Store.testUnits(t);
+      if (!all.length) {
+        box.innerHTML = `<div class="small"><b>📝 시험 범위</b> <span class="muted">· 먼저 <a href="#weak" style="color:var(--primary);font-weight:700">🔍 취약 체크</a>에서 과목·단원을 등록하면 테스트마다 시험 범위를 지정할 수 있어요.</span></div>`;
+        return;
+      }
+      if (!editing) {
+        box.innerHTML = `
+          <div class="row between wrap">
+            <div class="row wrap" style="gap:6px"><b>📝 시험 범위</b>${cur.length ? chips(cur) : '<span class="muted small">아직 지정하지 않았어요</span>'}</div>
+            <button type="button" class="btn btn-sm${cur.length ? '' : ' btn-primary'}" data-range-edit>${cur.length ? '범위 수정' : '범위 지정'}</button>
+          </div>
+          ${cur.length ? '<p class="muted small" style="margin:0">학생 이름 아래 [🔍 취약 체크]를 누르면 이 범위 단원이 맨 위에 나와요. 주간·월간 리포트에도 시험 범위가 함께 적혀요.</p>' : ''}`;
+        box.querySelector('[data-range-edit]').onclick = () => { editing = true; sel = new Set(t.unitIds); draw(); };
+        return;
+      }
+      const units = Store.unitsOf(subj);
+      const picked = Store.all('units').filter((u) => sel.has(u.id));
+      box.innerHTML = `
+        <div class="row between wrap">
+          <b>📝 시험 범위 지정</b>
+          <select class="ask-select" data-range-subj>${all.map((x) => `<option ${x === subj ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+        </div>
+        <div class="row wrap" style="gap:6px 16px">${units.map((u) => `
+          <label class="check"><input type="checkbox" value="${u.id}" ${sel.has(u.id) ? 'checked' : ''}> ${esc(u.title)}</label>`).join('') || '<span class="muted small">이 과목에 단원이 없어요</span>'}</div>
+        <div class="row between wrap">
+          <span class="small muted">고른 단원 ${picked.length}개${picked.some((u) => u.subject !== subj) ? ' (다른 과목 포함)' : ''}</span>
+          <span class="row"><button type="button" class="btn btn-sm" data-range-cancel>취소</button><button type="button" class="btn btn-sm btn-primary" data-range-save>범위 저장</button></span>
+        </div>`;
+      box.querySelector('[data-range-subj]').onchange = (e) => { subj = e.target.value; draw(); };
+      box.querySelectorAll('input[type=checkbox]').forEach((cb) => cb.onchange = () => {
+        if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+        draw();
+      });
+      box.querySelector('[data-range-cancel]').onclick = () => { editing = false; draw(); };
+      const save = box.querySelector('[data-range-save]');
+      save.onclick = () => UI.busy(save, async () => {
+        // 단원 순서대로 저장
+        const ids = Store.all('units').filter((u) => sel.has(u.id))
+          .sort((a, b) => a.subject.localeCompare(b.subject) || a.seq - b.seq).map((u) => u.id);
+        await Store.update('tests', t.id, { unitIds: ids });
+        t = Store.get('tests', t.id) || t;
+        editing = false;
+        UI.toast(ids.length ? `시험 범위 ${ids.length}개 단원을 저장했어요.` : '시험 범위를 비웠어요.');
+        draw();
+      }, '저장 중...');
+    };
+    draw();
+  }
+
   function scoreEntry(id) {
     const t = Store.get('tests', id);
     if (!t) { location.hash = '#scores'; return; }
@@ -1448,13 +1535,14 @@
           <div><b>${st.max ?? '-'} / ${st.min ?? '-'}</b><span>최고 / 최저</span></div>
         </div>
       </section>
+      <section class="card stack" id="rangeBox"></section>
       <form id="scoreForm">
         <div class="table-wrap"><table>
           <thead><tr><th style="width:140px">학생</th><th style="width:120px">점수</th><th>피드백 (학생 앱에 표시)</th></tr></thead>
           <tbody>${students.map((s) => {
             const sc = Store.scoreOf(t.id, s.id);
             return `<tr>
-              <td><b>${esc(s.name)}</b><div class="muted small">${esc(s.school)}</div><a class="small" style="color:var(--primary)" href="#weak/${s.id}" title="이 학생의 단원별 취약 부분 체크">🔍 취약 체크</a></td>
+              <td><b>${esc(s.name)}</b><div class="muted small">${esc(s.school)}</div><a class="small" style="color:var(--primary)" href="#weak/${s.id}/${t.id}" title="이 학생의 단원별 취약 부분 체크">🔍 취약 체크</a></td>
               <td><input type="number" class="score-input" name="score_${s.id}" min="0" max="${t.maxScore}" step="0.5" value="${hasScore(sc) ? sc.score : ''}" placeholder="-"></td>
               <td><textarea class="fb-input" name="fb_${s.id}" rows="1" placeholder="예) 계산 실수 주의! 서술형 풀이 좋아요">${esc(sc?.feedback || '')}</textarea></td>
             </tr>`;
@@ -1465,6 +1553,8 @@
           <button class="btn btn-primary">💾 전체 저장</button>
         </div>
       </form>`;
+
+    bindRange(t);
 
     // 저장하지 않은 점수가 있는데 취약 체크로 넘어가면 확인
     let dirty = false;

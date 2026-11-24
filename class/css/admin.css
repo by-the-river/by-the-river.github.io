@@ -168,3 +168,4 @@ td .title-link:hover { color: var(--primary); }
 .lv-resolved .pt.on { background: var(--success-weak); color: var(--success); border-color: var(--success); }
 .pt.add { border-style: dashed; color: var(--muted); background: transparent; }
 @media (max-width: 520px) { .unit-list { grid-template-columns: 1fr; } }
+.range-card { border-color: var(--primary); background: linear-gradient(var(--primary-weak), var(--surface) 70px); }
